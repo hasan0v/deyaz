@@ -26,7 +26,8 @@ yolla danışığı yazır, mətni təmizləyir və aktiv input sahəsinə əlav
 
 ### Hazır EXE
 
-GitHub Actions build artifact-ından `Dikte.exe` faylını endir və aç. Video
+[Dikte for Windows v1.0.0](https://github.com/hasan0v/dikte-windows/releases/tag/v1.0.0)
+release səhifəsindən `Dikte.exe` faylını endir və aç. Video
 transkripsiyası üçün [FFmpeg](https://ffmpeg.org/download.html) sistem `PATH`-ında
 olmalıdır.
 
