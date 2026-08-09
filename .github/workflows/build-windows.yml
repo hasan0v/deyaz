@@ -1,0 +1,40 @@
+name: Build Windows app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Validate Python sources
+        run: python -m py_compile dikte_windows.py api.py config.py filetranscribe.py i18n.py project_context.py work_modes.py
+
+      - name: Build Dikte.exe
+        run: python -m PyInstaller --noconfirm --clean Dikte.spec
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dikte-Windows
+          path: dist/Dikte.exe
+          if-no-files-found: error
