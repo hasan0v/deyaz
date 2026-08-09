@@ -1,5 +1,5 @@
 PyQt6>=6.10
-Pillow>=11
+Pillow>=12.3.0
 numpy>=2
 psutil>=7.2
 sounddevice>=0.5
