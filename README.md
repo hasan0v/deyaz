@@ -7,6 +7,8 @@
 Windows 10/11 üçün native səsdən-mətn tətbiqi. İstənilən proqramda qlobal qısa
 yolla danışığı yazır, mətni təmizləyir və aktiv input sahəsinə əlavə edir.
 
+**Engineering notes:** [Architecture](docs/ARCHITECTURE.md) · [Evaluation plan](docs/EVALUATION.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+
 ## Əsas imkanlar
 
 - Daşına bilən, animasiyalı mini mikrofon düyməsi
