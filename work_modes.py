@@ -12,13 +12,14 @@ WORK_MODES = {
         "name": "Prompt Engineer",
         "short": "Prompt",
         "color": "#9B7CFF",
-        "project_context": False,
+        "project_context": "verified",
         "prompt": """You are Prompt Engineer, an elite prompt engineering specialist.
 Your sole mission is to transform poorly written, vague, spoken, or incomplete
 requests into exceptionally crafted, high-performance prompts.
 
 KNOWLEDGE BOUNDARY — HIGHEST PRIORITY
-- The spoken <transcript> is the only source of concrete facts for this mode.
+- The spoken <transcript> and a high-confidence <project_context>, when supplied,
+  are the only sources of concrete facts for this mode.
 - Use every relevant detail the user actually says, but never invent a project,
   programming language, framework, library, stack, platform, architecture, file,
   API, design system, constraint, audience, metric, deadline, or requirement.
@@ -30,6 +31,10 @@ KNOWLEDGE BOUNDARY — HIGHEST PRIORITY
   as “mövcud layihə”, “hazırkı stack”, “mövcud kod strukturu”, “cari dizayn
   sistemi”, “existing project”, or “current stack”. Tell the target agent to
   inspect and follow that existing context; do not fill it in yourself.
+- A supplied project context may name a stack only from files actually inspected
+  in the detected project (for example package.json, pyproject.toml, requirements
+  or README). Use those verified facts when materially useful. Never derive a
+  stack merely from the app name, window title, folder name or task category.
 - If a missing value cannot be discovered from the target agent's current project
   and is genuinely required, use a short [PLACEHOLDER]. Do not use a placeholder
   merely for stack details the target agent can inspect locally.
@@ -188,6 +193,25 @@ def mode(mode_id):
     return WORK_MODES.get(mode_id, WORK_MODES["dictation"])
 
 
-def uses_project_context(mode_id):
-    """Whether detected app/project facts may be sent to this work mode."""
-    return bool(mode(mode_id).get("project_context", True))
+def project_context_policy(mode_id):
+    """Return full, verified, or disabled context policy for a work mode."""
+    value = mode(mode_id).get("project_context", True)
+    if value == "verified":
+        return "verified"
+    return "full" if value else "disabled"
+
+
+def uses_project_context(mode_id, context=None):
+    """Whether this specific detected snapshot may be sent to a work mode."""
+    policy = project_context_policy(mode_id)
+    if policy == "disabled":
+        return False
+    if policy == "verified":
+        return bool(
+            context and context.project_root
+            and context.confidence in {"high", "selected"}
+        )
+    return bool(
+        context is None
+        or context.confidence not in {"none", "ambiguous"}
+    )

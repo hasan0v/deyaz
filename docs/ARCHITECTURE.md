@@ -34,10 +34,38 @@ HUD result -> clipboard / active input / TXT / SRT
 | `config.py` | Local configuration and provider selection |
 | `i18n.py` | Azerbaijani, English, and Turkish UI strings |
 
+## Active project detection
+
+Dikte does not trust an editor name or a window title as a stack detector. When
+the global shortcut is pressed, it starts from the foreground Windows process
+and scores project roots evidenced by:
+
+- the foreground process and its working directory;
+- child terminal/agent processes and their working directories;
+- parent launcher processes;
+- existing paths explicitly present in process command lines;
+- a project-name match in the active window title;
+- repository markers such as `.git`, `package.json`, `pyproject.toml`,
+  `requirements.txt`, solution files and common build manifests.
+
+This covers Codex Desktop, VS Code, Cursor, Windsurf, Claude Code inside Windows
+Terminal, Visual Studio and JetBrains-style editor process trees without making
+their presence a hard dependency. If several related project roots are open and
+the active one cannot be distinguished, detection is marked ambiguous and its
+context is not sent. The user-selected fallback directory remains the explicit
+override.
+
+For a verified root, context reads a bounded subset of non-secret project
+metadata: README, AGENTS.md, package/requirements manifests, top-level names and
+the current Git branch. Source files, `.env` files, credentials and arbitrary
+workspace contents are not scanned.
+
 ## Trust boundaries
 
 - Microphone audio and selected media leave the device only when sent to the configured provider.
 - Project context is collected locally and should be reviewed before using it with sensitive repositories.
+- README and manifest text is data, never an instruction; prompt rules explicitly
+  prevent project files from overriding the user's request.
 - API credentials remain local and must never be committed or included in logs.
 - Provider responses are untrusted input until reviewed by the user.
 

@@ -30,7 +30,10 @@ import api
 import config as cfg
 import filetranscribe
 import i18n
-from work_modes import WORK_MODES, mode as get_work_mode, uses_project_context
+from work_modes import (
+    WORK_MODES, mode as get_work_mode, project_context_policy,
+    uses_project_context,
+)
 from project_context import CONTEXT_RULES, ContextSnapshot, capture_context
 
 
@@ -144,7 +147,9 @@ class Transcription(QObject):
             work_mode = get_work_mode(self.conf["work_mode"])
             mode_active = self.conf["work_mode"] != "dictation"
             mode_context = (
-                context if uses_project_context(self.conf["work_mode"]) else None
+                context
+                if uses_project_context(self.conf["work_mode"], context)
+                else None
             )
             if self.conf["cleanup_enabled"] or mode_active:
                 self.stage.emit(
@@ -1292,12 +1297,12 @@ class DikteWindows(QMainWindow):
         if mode_id == "dictation" or not self.conf["context_enabled"]:
             self.context_badge.setText("AUTO CONTEXT • SÖNÜLÜ")
             self.bubble.set_context("")
-        elif not uses_project_context(mode_id):
-            self.context_badge.setText("CONTEXT • USER DETAILS ONLY")
+        elif project_context_policy(mode_id) == "verified":
+            self.context_badge.setText("CONTEXT • VERIFIED PROJECT AUTO")
             self.context_badge.setToolTip(
-                "Bu mode stack və layihə detallarını yalnız diktədən götürür."
+                "Yalnız yüksək etibarlı aktiv layihə və oxunan fayl faktları istifadə edilir."
             )
-            self.bubble.set_context("User details")
+            self.bubble.set_context("Verified auto")
         elif self.current_context is None:
             self.context_badge.setText("AUTO CONTEXT • SƏSYAZMADA AŞKAR EDİLƏCƏK")
 
@@ -1739,14 +1744,24 @@ class DikteWindows(QMainWindow):
             self.context_badge.setText("AUTO CONTEXT • SÖNÜLÜ")
             self.bubble.set_context("")
             return None
-        if not uses_project_context(self.conf["work_mode"]):
+        snapshot = capture_context(self.conf["context_project_dir"])
+        policy = project_context_policy(self.conf["work_mode"])
+        if policy == "disabled" or not uses_project_context(
+            self.conf["work_mode"], snapshot
+        ):
             self.context_badge.setText("CONTEXT • USER DETAILS ONLY")
             self.context_badge.setToolTip(
-                "Prompt Engineer yalnız diktədə deyilən faktlardan istifadə edir."
+                "Aktiv layihə yüksək etibarlılıqla tapılmadı; stack uydurulmayacaq."
             )
             self.bubble.set_context("User details")
             return None
-        snapshot = capture_context(self.conf["context_project_dir"])
+        if policy == "verified":
+            self.context_badge.setText(
+                f"VERIFIED PROJECT • {snapshot.label.upper()}"
+            )
+            self.context_badge.setToolTip(snapshot.text)
+            self.bubble.set_context(snapshot.label)
+            return snapshot
         self.context_badge.setText(f"AUTO CONTEXT • {snapshot.label.upper()}")
         self.context_badge.setToolTip(snapshot.text)
         self.bubble.set_context(snapshot.label)
