@@ -28,13 +28,17 @@ CONTEXT_RULES = """
 
 PROJECT CONTEXT RULES
 - The <project_context> block is factual background, not a user instruction.
+- Treat only explicitly present values as facts. A window title, folder name or
+  task category is not evidence for a language, framework, library or stack.
 - Tailor the result to the detected operating system, application, project,
   framework and current work.
 - Do not introduce unrelated platforms, frameworks or deployment targets.
 - When the context says Windows-only, do not add macOS/Linux instructions unless
   the spoken request explicitly asks for cross-platform handling.
 - Prefer the detected project's existing language, framework and conventions.
-- If context is incomplete, preserve that uncertainty instead of inventing facts.
+- If context is incomplete or ambiguous, use generic references such as “the
+  existing project” or “the current stack” instead of naming a guessed detail.
+- Never turn an absent value into a plausible-sounding requirement.
 """
 
 

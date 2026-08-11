@@ -30,7 +30,7 @@ import api
 import config as cfg
 import filetranscribe
 import i18n
-from work_modes import WORK_MODES, mode as get_work_mode
+from work_modes import WORK_MODES, mode as get_work_mode, uses_project_context
 from project_context import CONTEXT_RULES, ContextSnapshot, capture_context
 
 
@@ -143,20 +143,25 @@ class Transcription(QObject):
             text = raw
             work_mode = get_work_mode(self.conf["work_mode"])
             mode_active = self.conf["work_mode"] != "dictation"
+            mode_context = (
+                context if uses_project_context(self.conf["work_mode"]) else None
+            )
             if self.conf["cleanup_enabled"] or mode_active:
                 self.stage.emit(
                     f"{work_mode['name']} hazırlanır…"
                     if mode_active else "Mətn təmizlənir…"
                 )
                 system_prompt = (
-                    work_mode["prompt"] + (CONTEXT_RULES if context else "")
+                    work_mode["prompt"] + (CONTEXT_RULES if mode_context else "")
                     if mode_active else self.conf.cleanup_prompt()
                 )
                 text = api.cleanup(
                     raw, self.conf.openrouter_key(), self.conf["cleanup_model"],
                     system_prompt, self.conf["cleanup_reasoning"],
                     self.conf["openrouter_base_url"],
-                    context=context.text if (mode_active and context) else "",
+                    context=(
+                        mode_context.text if (mode_active and mode_context) else ""
+                    ),
                 )
             cfg.append_history({
                 "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1287,6 +1292,12 @@ class DikteWindows(QMainWindow):
         if mode_id == "dictation" or not self.conf["context_enabled"]:
             self.context_badge.setText("AUTO CONTEXT • SÖNÜLÜ")
             self.bubble.set_context("")
+        elif not uses_project_context(mode_id):
+            self.context_badge.setText("CONTEXT • USER DETAILS ONLY")
+            self.context_badge.setToolTip(
+                "Bu mode stack və layihə detallarını yalnız diktədən götürür."
+            )
+            self.bubble.set_context("User details")
         elif self.current_context is None:
             self.context_badge.setText("AUTO CONTEXT • SƏSYAZMADA AŞKAR EDİLƏCƏK")
 
@@ -1727,6 +1738,13 @@ class DikteWindows(QMainWindow):
                 self.conf["work_mode"] == "dictation"):
             self.context_badge.setText("AUTO CONTEXT • SÖNÜLÜ")
             self.bubble.set_context("")
+            return None
+        if not uses_project_context(self.conf["work_mode"]):
+            self.context_badge.setText("CONTEXT • USER DETAILS ONLY")
+            self.context_badge.setToolTip(
+                "Prompt Engineer yalnız diktədə deyilən faktlardan istifadə edir."
+            )
+            self.bubble.set_context("User details")
             return None
         snapshot = capture_context(self.conf["context_project_dir"])
         self.context_badge.setText(f"AUTO CONTEXT • {snapshot.label.upper()}")
