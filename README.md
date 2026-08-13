@@ -57,7 +57,7 @@ interface in Azerbaijani, English, Turkish, and Russian.
 
 | Platform | Package | Support notes |
 |---|---|---|
-| Windows 10/11 x64 | `DeYaz-Windows-x64.zip` | Reference platform; microphone + system-audio meetings, global shortcut, Smart Paste |
+| Windows 10/11 x64 | `DeYaz-Windows-x64.exe` | Signed installer when release signing secrets are configured; Start Menu and Installed apps integration |
 | macOS 14+ Apple Silicon | `DeYaz-macOS-arm64.zip` | Dictation, file transcription, mic-only meetings; Accessibility and microphone permissions may be required |
 | Linux x64 | `DeYaz-Linux-x64.tar.gz` | Dictation, file transcription, mic-only meetings; global shortcuts work best on X11 and may be restricted on Wayland |
 
@@ -71,8 +71,9 @@ advertised as built-in support.
 Download the latest native package from
 [GitHub Releases](https://github.com/hasan0v/deyaz/releases).
 
-Windows users can extract the ZIP and run `DeYaz.exe`. The application stores
-settings outside the executable, so replacing the executable with a newer release
+Windows users should run the installer. It installs DeYaz per user, adds a Start
+Menu shortcut, and registers a standard uninstaller in Windows Installed apps.
+The application stores settings outside the executable, so installing a newer release
 does not remove normal user configuration.
 
 ## Run from source
@@ -163,6 +164,18 @@ Build for the current operating system:
 ```bash
 python -m PyInstaller --noconfirm --clean DeYaz.spec
 ```
+
+To build the standard Windows installer after installing Inno Setup 6:
+
+```powershell
+.\scripts\build_windows_installer.ps1
+```
+
+Release signing is optional in local builds. Official Windows releases should set
+`WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` GitHub secrets so
+both the application and installer receive an Authenticode signature. No project
+can guarantee zero antivirus warnings, but signed, unpacked binaries with stable
+publisher metadata substantially reduce heuristic false positives.
 
 PyInstaller is not a cross-compiler. The
 [desktop build workflow](.github/workflows/build-desktop.yml) builds Windows,

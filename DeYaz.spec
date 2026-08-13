@@ -3,7 +3,7 @@
 import sys
 
 
-version = "1.0.1"
+version = "1.0.2"
 is_windows = sys.platform == "win32"
 is_macos = sys.platform == "darwin"
 icon = (
@@ -43,7 +43,9 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=is_windows,
+    # UPX-packed binaries are smaller but disproportionately trigger heuristic
+    # antivirus detections. Release a conventional executable instead.
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

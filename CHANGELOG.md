@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2 — Windows installer and motion polish
+
+- Added a proper per-user Windows installer with Start Menu and uninstall registration.
+- Removed UPX packing to reduce heuristic antivirus false positives.
+- Matched the GitHub button to the header and moved attention to a softly glowing star.
+- Added restrained, layout-safe transitions between the main work surfaces.
+
 ## 1.0.1 — Creator links and dictation polish
 
 - Added responsive GitHub and LinkedIn creator actions beside the DeYaz wordmark.

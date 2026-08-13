@@ -35,7 +35,7 @@ from PyQt6.QtWidgets import (
     QAbstractButton, QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDialog,
     QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
     QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QGraphicsDropShadowEffect, QMainWindow, QMenu, QMessageBox,
+    QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QMainWindow, QMenu, QMessageBox,
     QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QSlider,
     QSpinBox, QStackedWidget, QSystemTrayIcon, QTabWidget,
     QToolButton, QVBoxLayout, QWidget,
@@ -2854,7 +2854,7 @@ class DeYazWindow(QMainWindow):
             #socialGithub, #socialLinkedIn {{ color: #202321; border: 2px solid #292C2A;
                 border-radius: 12px; padding: 7px; min-width: 36px; max-width: 36px;
                 min-height: 36px; max-height: 36px; }}
-            #socialGithub {{ background: {c['yellow']}; }}
+            #socialGithub {{ background: transparent; }}
             #socialLinkedIn {{ background: {c['blue']}; }}
             #socialGithub:hover, #socialLinkedIn:hover {{ border-width: 3px; padding: 6px; }}
             #socialGithub:pressed, #socialLinkedIn:pressed {{ padding-top: 9px; padding-bottom: 5px; }}
@@ -3056,10 +3056,10 @@ class DeYazWindow(QMainWindow):
         self.github_star.setAttribute(
             Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
         )
-        self.github_star.setFixedSize(14, 14)
+        self.github_star.setFixedSize(16, 16)
         self.github_star.setStyleSheet(
-            "background: #FFF4B5; color: #202321; border: 1px solid #292C2A; "
-            "border-radius: 7px; font-family: 'Segoe UI'; font-size: 9px; font-weight: 900;"
+            "background: transparent; color: #FFC52F; border: 0; "
+            "font-family: 'Segoe UI Symbol'; font-size: 12px; font-weight: 900;"
         )
         self.github_button.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://github.com/hasan0v/deyaz"))
@@ -3077,25 +3077,29 @@ class DeYazWindow(QMainWindow):
         brand_l.addWidget(self.creator_credit)
         brand_l.addWidget(self.github_button)
         brand_l.addWidget(self.linkedin_button)
+        # Keep the GitHub control visually native to the header. Only its star
+        # breathes softly, so the call to action is visible without a loud tile.
         self.social_animations = []
-        for button, glow in (
-            (self.github_button, QColor(255, 199, 35, 150)),
-            (self.linkedin_button, QColor(55, 160, 230, 135)),
-        ):
-            effect = QGraphicsDropShadowEffect(button)
-            effect.setOffset(0, 0)
-            effect.setBlurRadius(10)
-            effect.setColor(glow)
-            button.setGraphicsEffect(effect)
-            animation = QPropertyAnimation(effect, b"blurRadius", button)
-            animation.setDuration(1800 if button is self.github_button else 2400)
-            animation.setKeyValueAt(0.0, 9.0)
-            animation.setKeyValueAt(0.5, 23.0 if button is self.github_button else 17.0)
-            animation.setKeyValueAt(1.0, 9.0)
-            animation.setEasingCurve(QEasingCurve.Type.InOutSine)
-            animation.setLoopCount(-1)
-            animation.start()
-            self.social_animations.append(animation)
+        star_glow = QGraphicsDropShadowEffect(self.github_star)
+        star_glow.setOffset(0, 0)
+        star_glow.setBlurRadius(5)
+        star_glow.setColor(QColor(255, 197, 47, 220))
+        self.github_star.setGraphicsEffect(star_glow)
+        star_animation = QPropertyAnimation(star_glow, b"blurRadius", self.github_star)
+        star_animation.setDuration(1500)
+        star_animation.setKeyValueAt(0.0, 4.0)
+        star_animation.setKeyValueAt(0.5, 14.0)
+        star_animation.setKeyValueAt(1.0, 4.0)
+        star_animation.setEasingCurve(QEasingCurve.Type.InOutSine)
+        star_animation.setLoopCount(-1)
+        star_animation.start()
+        self.social_animations.append(star_animation)
+
+        linkedin_glow = QGraphicsDropShadowEffect(self.linkedin_button)
+        linkedin_glow.setOffset(0, 0)
+        linkedin_glow.setBlurRadius(9)
+        linkedin_glow.setColor(QColor(55, 160, 230, 115))
+        self.linkedin_button.setGraphicsEffect(linkedin_glow)
         self.eyebrow = QLabel("", objectName="eyebrow")
         self.eyebrow.hide()
 
@@ -5072,10 +5076,13 @@ class DeYazWindow(QMainWindow):
                 restore = "dictation"
             self.set_work_mode(restore)
 
+        previous_surface = self.current_surface
         self.current_surface = surface
         if surface != "home":
             self._last_surface = surface
         self.page_stack.setCurrentWidget(self.surface_pages[surface])
+        if surface != previous_surface and not force:
+            self._animate_surface_entry(self.surface_pages[surface])
         self.page_header.setVisible(surface != "home")
         self.file_mode_panel.hide()
         self.meeting_card.hide()
@@ -5090,6 +5097,34 @@ class DeYazWindow(QMainWindow):
             self._update_dictation_result_layout()
         self.refresh_auth_gate()
         QTimer.singleShot(0, lambda: self.scroll.verticalScrollBar().setValue(0))
+
+    def _animate_surface_entry(self, page):
+        """A short GPU-light fade that never changes layout geometry."""
+        self._animate_page_entry(page, "surface_transition")
+
+    def _animate_page_entry(self, page, slot):
+        """Fade a stacked page without resizing or moving surrounding widgets."""
+        previous_animation = getattr(self, slot, None)
+        previous_page = getattr(self, f"{slot}_page", None)
+        if previous_animation:
+            previous_animation.stop()
+        if previous_page is not None and previous_page is not page:
+            previous_page.setGraphicsEffect(None)
+        old_effect = page.graphicsEffect()
+        if old_effect is not None:
+            page.setGraphicsEffect(None)
+        effect = QGraphicsOpacityEffect(page)
+        effect.setOpacity(0.42)
+        page.setGraphicsEffect(effect)
+        animation = QPropertyAnimation(effect, b"opacity", self)
+        animation.setDuration(180)
+        animation.setStartValue(0.42)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.finished.connect(lambda: page.setGraphicsEffect(None))
+        setattr(self, slot, animation)
+        setattr(self, f"{slot}_page", page)
+        animation.start()
 
     def open_history_drawer(self):
         self.history_popup.refresh(cfg.read_history(30))
@@ -5131,7 +5166,12 @@ class DeYazWindow(QMainWindow):
     def settings_page_changed(self, index):
         if not 0 <= index < len(self.settings_page_sources):
             return
+        previous = self.settings_pages.currentIndex()
         self.settings_pages.setCurrentIndex(index)
+        if previous != index:
+            self._animate_page_entry(
+                self.settings_pages.widget(index), "settings_transition"
+            )
         if self.settings_mobile_nav.currentIndex() != index:
             self.settings_mobile_nav.setCurrentIndex(index)
         self.settings_page_title.setText(
@@ -7089,7 +7129,7 @@ class DeYazWindow(QMainWindow):
             button.setFixedSize(social_size, social_size)
             icon_size = 20 if density == "roomy" else 18
             button.setIconSize(QSize(icon_size, icon_size))
-        self.github_star.move(social_size - 15, 1)
+        self.github_star.move(social_size - 16, 0)
         self.github_star.raise_()
         for button in (
             self.appearance_switch, self.language_button,
