@@ -23,9 +23,16 @@ class WindowsInstallerTests(unittest.TestCase):
         spec = (ROOT / "DeYaz.spec").read_text(encoding="utf-8")
         installer = (ROOT / "installer" / "DeYaz.iss").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
-        self.assertIn('version = "1.0.2"', spec)
-        self.assertIn('#define MyAppVersion "1.0.2"', installer)
-        self.assertIn("DeYaz-Setup-1.0.2-x64.exe", workflow)
+        self.assertIn('version = "1.0.3"', spec)
+        self.assertIn('#define MyAppVersion "1.0.3"', installer)
+        self.assertIn("DeYaz-Setup-1.0.3-x64.exe", workflow)
+
+    def test_installed_runtime_uses_one_folder_not_one_file(self):
+        spec = (ROOT / "DeYaz.spec").read_text(encoding="utf-8")
+        installer = (ROOT / "installer" / "DeYaz.iss").read_text(encoding="utf-8")
+        self.assertIn("exclude_binaries=True", spec)
+        self.assertIn("distribution = COLLECT(", spec)
+        self.assertIn('Source: "..\\dist\\DeYaz\\*"', installer)
 
     def test_surface_switch_uses_short_opacity_transition(self):
         source = inspect.getsource(DeYazWindow._animate_page_entry)

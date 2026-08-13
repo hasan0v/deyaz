@@ -3,7 +3,7 @@
 import sys
 
 
-version = "1.0.2"
+version = "1.0.3"
 is_windows = sys.platform == "win32"
 is_macos = sys.platform == "darwin"
 icon = (
@@ -36,10 +36,10 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
+    [],
     [],
     name="DeYaz",
+    exclude_binaries=True,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -58,9 +58,18 @@ exe = EXE(
     version="version_info.txt" if is_windows else None,
 )
 
+distribution = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="DeYaz",
+)
+
 if is_macos:
     app = BUNDLE(
-        exe,
+        distribution,
         name="DeYaz.app",
         icon=icon,
         bundle_identifier="io.github.hasan0v.deyaz",

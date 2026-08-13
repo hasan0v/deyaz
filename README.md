@@ -177,6 +177,10 @@ both the application and installer receive an Authenticode signature. No project
 can guarantee zero antivirus warnings, but signed, unpacked binaries with stable
 publisher metadata substantially reduce heuristic false positives.
 
+The Windows installer uses PyInstaller's one-folder runtime internally. Users still
+receive one setup file and one Start Menu entry, while DeYaz starts faster and does
+not expose the one-file bootloader's parent/child process pair during updates.
+
 PyInstaller is not a cross-compiler. The
 [desktop build workflow](.github/workflows/build-desktop.yml) builds Windows,
 macOS, and Linux packages on native GitHub runners. Pushing a `v*` tag publishes

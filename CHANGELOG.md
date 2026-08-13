@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 — Native installed runtime
+
+- Changed the installed Windows runtime from PyInstaller one-file to one-folder.
+- Removed the visible parent/child process duplication during installer updates.
+- Improved startup time and further reduced heuristic antivirus risk.
+
 ## 1.0.2 — Windows installer and motion polish
 
 - Added a proper per-user Windows installer with Start Menu and uninstall registration.
