@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
     QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QGraphicsDropShadowEffect, QMainWindow, QMenu, QMessageBox,
-    QPlainTextEdit, QProgressBar, QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider,
+    QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QSlider,
     QSpinBox, QStackedWidget, QSystemTrayIcon, QTabWidget,
     QToolButton, QVBoxLayout, QWidget,
 )
@@ -809,27 +809,29 @@ class ContextManagerDialog(QDialog):
         self.setObjectName("contextManagerDialog")
         self.setWindowTitle("Kontekst")
         self.setModal(True)
-        self.resize(980, 640)
+        self.resize(1000, 660)
         self.setMinimumSize(780, 520)
         self.root = QVBoxLayout(self)
-        self.root.setContentsMargins(34, 24, 34, 30)
-        self.root.setSpacing(18)
-        head = QHBoxLayout()
+        self.root.setContentsMargins(28, 24, 28, 28)
+        self.root.setSpacing(20)
+        header = QFrame(objectName="contextManagerHeader")
+        head = QHBoxLayout(header)
+        head.setContentsMargins(20, 14, 14, 14)
+        head.setSpacing(14)
         title = QLabel("Kontekst", objectName="contextManagerTitle")
         self.add_button = QPushButton(objectName="contextPlusAction")
         self.add_button.setIcon(line_icon("plus", "#202321", 28))
-        self.add_button.setIconSize(QSize(34, 34))
-        self.add_button.setFixedSize(66, 58)
+        self.add_button.setIconSize(QSize(26, 26))
+        self.add_button.setFixedSize(54, 50)
         self.add_button.clicked.connect(self.open_add)
-        head.addStretch()
         head.addWidget(title)
         head.addStretch()
         head.addWidget(self.add_button)
-        self.root.addLayout(head)
+        self.root.addWidget(header)
         self.body = QWidget()
         self.body_layout = QGridLayout(self.body)
         self.body_layout.setContentsMargins(0, 0, 0, 0)
-        self.body_layout.setHorizontalSpacing(28)
+        self.body_layout.setHorizontalSpacing(20)
         self.root.addWidget(self.body, 1)
         self.refresh()
         localize_widget_tree(self)
@@ -838,31 +840,89 @@ class ContextManagerDialog(QDialog):
         ContextAddDialog(self.owner, self).exec()
         self.refresh()
 
+    @staticmethod
+    def _choice_copy(label, preview, compact_path=False):
+        preview = " ".join((preview or "").split())
+        if not preview:
+            return label
+        if compact_path:
+            normalized = preview.replace("\\", "/").rstrip("/")
+            parts = [part for part in normalized.split("/") if part]
+            preview = "/".join(parts[-2:]) if parts else normalized
+            if len(preview) > 38:
+                preview = "…" + preview[-37:]
+        elif len(preview) > 72:
+            preview = preview[:69].rstrip() + "…"
+        return f"{label}\n{preview}"
+
+    def _toggle_project(self, index, checked, source):
+        if getattr(self, "_syncing_project_choices", False):
+            return
+        self._syncing_project_choices = True
+        try:
+            if checked:
+                for button in self.project_buttons:
+                    if button is source:
+                        continue
+                    button.blockSignals(True)
+                    button.setChecked(False)
+                    button.blockSignals(False)
+            self.owner.set_context_item_enabled(index, checked)
+        finally:
+            self._syncing_project_choices = False
+
+    def _sync_choice_icon(self, button, icon_name, checked):
+        dark = getattr(self.owner, "theme", "light") == "dark"
+        color = "#202321" if checked or not dark else "#F8F3E8"
+        button.setIcon(line_icon(icon_name, color, 20))
+
+    def _panel(self, title, icon_name, object_name):
+        panel = QFrame(objectName=object_name)
+        panel_l = QVBoxLayout(panel)
+        panel_l.setContentsMargins(18, 16, 18, 18)
+        panel_l.setSpacing(12)
+        panel_head = QHBoxLayout()
+        panel_head.setSpacing(10)
+        icon = QLabel(objectName="contextColumnIcon")
+        icon.setPixmap(line_icon(icon_name, "#202321", 20).pixmap(24, 24))
+        icon.setFixedSize(32, 32)
+        panel_head.addWidget(icon)
+        panel_head.addWidget(QLabel(title, objectName="contextColumnTitle"))
+        panel_head.addStretch()
+        panel_l.addLayout(panel_head)
+
+        scroll = QScrollArea(objectName="contextListScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.viewport().setAutoFillBackground(False)
+        content = QWidget(objectName="contextListContent")
+        content_l = QVBoxLayout(content)
+        content_l.setContentsMargins(1, 1, 1, 1)
+        content_l.setSpacing(10)
+        scroll.setWidget(content)
+        panel_l.addWidget(scroll, 1)
+        return panel, content_l
+
     def refresh(self):
         while self.body_layout.count():
             item = self.body_layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
-        projects = QFrame(objectName="contextSources")
-        project_l = QVBoxLayout(projects)
-        project_l.setContentsMargins(0, 0, 0, 0)
-        project_l.setSpacing(14)
-        project_l.addWidget(QLabel("Proyekt", objectName="contextColumnTitle"))
-        references = QFrame(objectName="contextEntries")
-        reference_l = QVBoxLayout(references)
-        reference_l.setContentsMargins(0, 0, 0, 0)
-        reference_l.setSpacing(14)
-        reference_l.addWidget(QLabel(
-            "Mətn və fayllar", objectName="contextColumnTitle"
-        ))
+        projects, project_l = self._panel(
+            "Proyekt", "folder", "contextProjectPanel"
+        )
+        references, reference_l = self._panel(
+            "Mətn və fayllar", "clipboard", "contextReferencePanel"
+        )
         items = (
             self.owner._context_items()
             if hasattr(self.owner, "_context_items")
             else list(self.owner.conf.get("context_items", []) or [])
         )
-        self.project_group = QButtonGroup(self)
-        self.project_group.setExclusive(True)
+        self.project_buttons = []
+        self.reference_buttons = []
         has_project = False
         has_reference = False
         for index, item in enumerate(items):
@@ -870,27 +930,49 @@ class ContextManagerDialog(QDialog):
             label = (item.get("label") or "Kontekst").strip()
             if item.get("kind") == "project":
                 has_project = True
-                choice = QRadioButton(label, objectName="contextProjectChoice")
+                choice = QPushButton(
+                    self._choice_copy(label, preview, compact_path=True),
+                    objectName="contextProjectChoice",
+                )
+                choice.setCheckable(True)
                 choice.setChecked(bool(item.get("enabled", False)))
+                choice.setIconSize(QSize(24, 24))
+                self._sync_choice_icon(choice, "folder", choice.isChecked())
+                choice.setCursor(Qt.CursorShape.PointingHandCursor)
                 choice.setToolTip(preview)
                 choice.toggled.connect(
-                    lambda checked, row=index: checked
-                    and self.owner.set_context_item_enabled(row, True)
+                    lambda checked, button=choice:
+                    self._sync_choice_icon(button, "folder", checked)
                 )
-                self.project_group.addButton(choice)
+                choice.toggled.connect(
+                    lambda checked, row=index, button=choice:
+                    self._toggle_project(row, checked, button)
+                )
+                self.project_buttons.append(choice)
                 project_l.addWidget(choice)
                 continue
             has_reference = True
-            copy = label if not preview else f"{label}\n{preview[:170]}"
-            check = QCheckBox(copy, objectName="contextEntry")
-            check.setChecked(bool(item.get("enabled", True)))
-            check.setToolTip(preview)
-            check.stateChanged.connect(
-                lambda state, row=index: self.owner.set_context_item_enabled(
-                    row, state == Qt.CheckState.Checked.value
+            choice = QPushButton(
+                self._choice_copy(label, preview), objectName="contextEntry"
+            )
+            choice.setCheckable(True)
+            choice.setChecked(bool(item.get("enabled", True)))
+            icon_name = "file" if item.get("kind") == "file" else "clipboard"
+            choice.setIconSize(QSize(24, 24))
+            self._sync_choice_icon(choice, icon_name, choice.isChecked())
+            choice.setCursor(Qt.CursorShape.PointingHandCursor)
+            choice.setToolTip(preview)
+            choice.toggled.connect(
+                lambda checked, button=choice, name=icon_name:
+                self._sync_choice_icon(button, name, checked)
+            )
+            choice.toggled.connect(
+                lambda checked, row=index: self.owner.set_context_item_enabled(
+                    row, checked
                 )
             )
-            reference_l.addWidget(check)
+            self.reference_buttons.append(choice)
+            reference_l.addWidget(choice)
         if not has_project:
             project_l.addWidget(QLabel(
                 "Proyekt əlavə edilməyib", objectName="contextEmpty"
@@ -903,7 +985,7 @@ class ContextManagerDialog(QDialog):
         reference_l.addStretch()
         self.body_layout.addWidget(projects, 0, 0)
         self.body_layout.addWidget(references, 0, 1)
-        self.body_layout.setColumnStretch(0, 2)
+        self.body_layout.setColumnStretch(0, 3)
         self.body_layout.setColumnStretch(1, 5)
         localize_widget_tree(self)
 
@@ -2512,34 +2594,52 @@ class DeYazWindow(QMainWindow):
             #modelDialog, #creditDialog {{ background: {c['surface']}; }}
             #contextAddDialog, #contextTextDialog {{ background: {c['yellow']};
                 border: 3px solid #292C2A; border-radius: 26px; }}
-            #contextManagerDialog {{ background: {c['blue']};
+            #contextManagerDialog {{ background: {c['surface']};
                 border: 3px solid #292C2A; border-radius: 26px; }}
+            #contextManagerHeader {{ background: {c['yellow']}; color: #202321;
+                border: 3px solid #292C2A; border-radius: 20px; }}
             #contextDialogTitle, #contextManagerTitle {{ color: #202321;
                 font-family: 'Segoe Print'; font-size: 31px; font-weight: 760; }}
-            #contextManagerTitle {{ font-size: 38px; }}
+            #contextManagerTitle {{ font-size: 28px; }}
             #contextProjectAction, #contextPasteAction, #contextFileAction,
-            #contextPlusAction, #contextSource, #contextEntry,
+            #contextPlusAction, #contextEntry,
             #contextProjectChoice {{ color: #202321;
                 border: 3px solid #292C2A; border-radius: 20px;
                 font-family: 'Segoe Print'; font-size: 18px; font-weight: 700; }}
-            #contextProjectAction, #contextPlusAction, #contextSource {{ background: {c['pink']}; }}
-            #contextPasteAction, #contextEntry {{ background: {c['green']}; }}
+            #contextProjectAction, #contextPlusAction {{ background: {c['pink']}; }}
+            #contextPasteAction {{ background: {c['green']}; }}
             #contextFileAction {{ background: {c['blue']}; }}
             #contextProjectAction:hover, #contextPasteAction:hover,
-            #contextFileAction:hover, #contextPlusAction:hover, #contextSource:hover {{
+            #contextFileAction:hover, #contextPlusAction:hover {{
                 border-width: 4px; }}
             #contextProjectAction:pressed, #contextPasteAction:pressed,
             #contextFileAction:pressed, #contextPlusAction:pressed {{ padding-top: 6px; }}
-            #contextSource {{ min-height: 72px; padding: 10px 18px; }}
-            #contextSource:checked {{ background: {c['yellow']}; border-width: 4px; }}
-            #contextEntry {{ padding: 18px; min-height: 58px; }}
-            #contextEntry::indicator {{ width: 26px; height: 26px; }}
-            #contextProjectChoice {{ background: {c['pink']}; padding: 18px;
-                min-height: 58px; }}
-            #contextProjectChoice::indicator {{ width: 28px; height: 28px; }}
+            #contextProjectPanel {{ background: {c['pink']}; border: 3px solid #292C2A;
+                border-radius: 22px; }}
+            #contextReferencePanel {{ background: {c['green']}; border: 3px solid #292C2A;
+                border-radius: 22px; }}
+            #contextListScroll, #contextListContent {{ background: transparent; border: 0; }}
+            #contextColumnIcon {{ background: rgba(255,255,255,120); border: 2px solid #292C2A;
+                border-radius: 9px; padding: 3px; }}
+            #contextProjectChoice, #contextEntry {{ background: {c['surface']};
+                color: {c['text']};
+                text-align: left; padding: 13px 16px; min-height: 66px;
+                font-family: 'Segoe UI'; font-size: 13px; font-weight: 700; }}
+            #contextProjectChoice:hover, #contextEntry:hover {{ background: {c['yellow']};
+                color: #202321; border-width: 4px; padding: 12px 15px; }}
+            #contextProjectChoice:pressed, #contextEntry:pressed {{
+                background: {c['soft']}; padding-top: 15px; padding-bottom: 11px; }}
+            #contextProjectChoice:checked {{ background: {c['purple']}; border-width: 4px;
+                color: #202321; padding: 12px 15px; }}
+            #contextEntry:checked {{ background: {c['blue']}; border-width: 4px;
+                color: #202321; padding: 12px 15px; }}
+            #contextProjectChoice:focus, #contextEntry:focus {{ border: 4px solid {c['accent']};
+                padding: 12px 15px; }}
             #contextColumnTitle {{ color: #202321; font-size: 18px; font-weight: 800;
                 padding: 0 4px 4px 4px; }}
-            #contextEmpty {{ color: #4E5551; font-size: 14px; padding: 18px 6px; }}
+            #contextEmpty {{ color: #4E5551; background: rgba(255,255,255,95);
+                border: 2px dashed rgba(41,44,42,120); border-radius: 16px;
+                font-size: 13px; padding: 22px 12px; }}
             #contextTextEditor {{ background: {c['surface']}; color: {c['text']};
                 border: 3px solid #292C2A; border-radius: 16px; padding: 14px; }}
             #contextSaveAction {{ background: {c['green']}; color: #202321;
@@ -5685,7 +5785,22 @@ class DeYazWindow(QMainWindow):
         return normalized
 
     def _save_context_items(self, items):
+        # Context may contain many references, but at most one explicit project.
+        # Keeping this invariant in persistence also protects non-UI callers.
+        selected_project = ""
+        has_selected_project = False
+        for item in items:
+            if item.get("kind") != "project" or not item.get("enabled", False):
+                continue
+            if has_selected_project:
+                item["enabled"] = False
+            else:
+                selected_project = (item.get("path") or "").strip()
+                has_selected_project = True
         self.conf["context_items"] = items
+        self.conf["context_project_dir"] = selected_project
+        if hasattr(self, "context_dir"):
+            self.context_dir.setText(selected_project)
         self.conf["context_enabled"] = True
         if hasattr(self, "context_enabled"):
             self.context_enabled.setChecked(True)
@@ -5762,9 +5877,6 @@ class DeYazWindow(QMainWindow):
                 for row, item in enumerate(items):
                     if item.get("kind") == "project":
                         item["enabled"] = row == index
-                self.conf["context_project_dir"] = items[index].get("path", "")
-                if hasattr(self, "context_dir"):
-                    self.context_dir.setText(self.conf["context_project_dir"])
             else:
                 items[index]["enabled"] = bool(enabled)
             self._save_context_items(items)

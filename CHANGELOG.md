@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.3 — Context manager redesign
+
+- Replaced native project radio controls with clear, checkable project cards.
+- Project selection now supports zero or one folder and click-to-unselect.
+- Text and file references remain independently selectable.
+- Added scrollable panels, stronger interaction states and corrected dark-mode contrast.
+
 ## 3.0.2 — UI clipping fixes
 
 - Dictation mode dropdown arrow stays inside the rounded selector.
