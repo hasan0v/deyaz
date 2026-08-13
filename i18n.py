@@ -46,9 +46,9 @@ UI = {
         "Star DeYaz on GitHub", "DeYaz'a GitHub'da yıldız ver",
         "Поставить DeYaz звезду на GitHub",
     ),
-    "LinkedIn-də Ali Hasanov-u izləyin": (
-        "Follow Ali Hasanov on LinkedIn", "Ali Hasanov'u LinkedIn'de takip et",
-        "Подписаться на Ali Hasanov в LinkedIn",
+    "LinkedIn-də məni izləyin": (
+        "Follow me on LinkedIn", "Beni LinkedIn'de takip et",
+        "Подписаться на меня в LinkedIn",
     ),
     "Sən": ("You", "Sen", "Вы"),
     "Görüş səsi": ("Meeting audio", "Toplantı sesi", "Звук встречи"),

@@ -1576,6 +1576,11 @@ class RecordButton(QPushButton):
         self.pulse_timer.setInterval(620)
         self.pulse_timer.timeout.connect(self._pulse)
         self.pulse_wide = False
+        self.preparing = False
+        self.preparing_phase = 0
+        self.preparing_timer = QTimer(self)
+        self.preparing_timer.setInterval(42)
+        self.preparing_timer.timeout.connect(self._advance_preparing)
 
     def _animate_shadow(self, radius):
         self.shadow_animation.stop()
@@ -1593,6 +1598,8 @@ class RecordButton(QPushButton):
         super().leaveEvent(event)
 
     def set_recording_active(self, active):
+        if active:
+            self.set_preparing_active(False)
         self.setProperty("recording", bool(active))
         if active:
             self.pulse_timer.start()
@@ -1606,6 +1613,46 @@ class RecordButton(QPushButton):
     def _pulse(self):
         self.pulse_wide = not self.pulse_wide
         self._animate_shadow(46 if self.pulse_wide else 28)
+
+    def set_preparing_active(self, active):
+        """Show a light orbit animation while speech is being processed."""
+        self.preparing = bool(active)
+        self.setProperty("preparing", self.preparing)
+        if self.preparing:
+            self.preparing_timer.start()
+            self._animate_shadow(40)
+        else:
+            self.preparing_timer.stop()
+            if not self.property("recording"):
+                self._animate_shadow(24)
+        self.update()
+
+    def _advance_preparing(self):
+        self.preparing_phase = (self.preparing_phase + 7) % 360
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.preparing:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        center = self.rect().center()
+        side = max(94.0, min(self.width(), self.height()) * 0.38)
+        ring = QRectF(
+            center.x() - side / 2, center.y() - side / 2, side, side
+        )
+        colours = ("#FF7B8C", "#8B7CF6", "#50D2B2")
+        for index, colour in enumerate(colours):
+            pen_colour = QColor(colour)
+            pen_colour.setAlpha(205 - index * 28)
+            pen = QPen(pen_colour, 4.0, Qt.PenStyle.SolidLine,
+                       Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            start = self.preparing_phase + index * 120
+            painter.drawArc(ring.adjusted(index * 5, index * 5, -index * 5, -index * 5),
+                            int(start * 16), int(54 * 16))
+        painter.end()
 
 
 class CurrentPageStack(QStackedWidget):
@@ -2342,6 +2389,7 @@ class DeYazWindow(QMainWindow):
         self.meeting_live_items = []
         self.meeting_live_partials = {}
         self.latest_result_text = ""
+        self._dictation_result_open = False
         self.current_context = None
         configured_mode = self.conf.get("work_mode", "dictation")
         self._dictation_work_mode = (
@@ -2943,6 +2991,14 @@ class DeYazWindow(QMainWindow):
             #audioDevicePicker {{ border: 0; background: transparent; color: {c['text']};
                                   padding: 8px 10px; font-size: 12px; font-weight: 720; }}
             #audioDevicePicker:hover, #audioDevicePicker:on {{ border: 0; background: {c['yellow']}; }}
+            #dictationModelBar {{ background-color: {c['surface']}; border: 3px solid #292C2A;
+                                  border-radius: 18px; }}
+            #dictationModelBar QLabel {{ color: {c['muted']}; font-size: 10px; font-weight: 750; }}
+            #dictationModelPicker {{ min-height: 34px; background: {c['field']}; color: {c['text']};
+                                     border: 2px solid {c['separator']}; border-radius: 11px;
+                                     padding: 5px 10px; font-size: 11px; font-weight: 720; }}
+            #dictationModelPicker:hover {{ background: {c['yellow']}; border-color: #292C2A; }}
+            #dictationModelPicker:on, #dictationModelPicker:focus {{ border-color: {c['accent']}; }}
             #contextButton {{ background-color: {c['mint']}; color: #202321;
                               border: 3px solid #292C2A; border-radius: 18px;
                               font-size: 17px; }}
@@ -3068,8 +3124,8 @@ class DeYazWindow(QMainWindow):
         self.linkedin_button.setIcon(qta.icon("fa6b.linkedin-in", color="#202321"))
         self.linkedin_button.setIconSize(QSize(19, 19))
         self.linkedin_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.linkedin_button.setToolTip("LinkedIn-də Ali Hasanov-u izləyin")
-        self.linkedin_button.setAccessibleName("LinkedIn-də Ali Hasanov-u izləyin")
+        self.linkedin_button.setToolTip("LinkedIn-də məni izləyin")
+        self.linkedin_button.setAccessibleName("LinkedIn-də məni izləyin")
         self.linkedin_button.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://www.linkedin.com/in/ali-hasanov"))
         )
@@ -4442,6 +4498,40 @@ class DeYazWindow(QMainWindow):
         )
         dictation_audio_l.addWidget(self.dictation_microphone, 1)
 
+        self.dictation_model_bar = QFrame(objectName="dictationModelBar")
+        dictation_model_l = QGridLayout(self.dictation_model_bar)
+        dictation_model_l.setContentsMargins(14, 10, 14, 12)
+        dictation_model_l.setHorizontalSpacing(12)
+        dictation_model_l.setVerticalSpacing(5)
+        dictation_transcribe_label = QLabel("Transkripsiya modeli")
+        dictation_text_label = QLabel("Mətn modeli")
+        self.dictation_transcribe_model = QComboBox(
+            objectName="dictationModelPicker"
+        )
+        self.dictation_text_model = QComboBox(objectName="dictationModelPicker")
+        for combo in (self.dictation_transcribe_model, self.dictation_text_model):
+            combo.setMinimumWidth(0)
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(14)
+            combo.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+            )
+        dictation_model_l.addWidget(dictation_transcribe_label, 0, 0)
+        dictation_model_l.addWidget(self.dictation_transcribe_model, 0, 1)
+        dictation_model_l.addWidget(dictation_text_label, 1, 0)
+        dictation_model_l.addWidget(self.dictation_text_model, 1, 1)
+        dictation_model_l.setColumnStretch(0, 0)
+        dictation_model_l.setColumnStretch(1, 1)
+        self.refresh_dictation_models()
+        self.dictation_transcribe_model.currentIndexChanged.connect(
+            self.dictation_transcribe_model_changed
+        )
+        self.dictation_text_model.currentIndexChanged.connect(
+            self.dictation_text_model_changed
+        )
+
         self.dictation_page = QWidget()
         dictation_l = QGridLayout(self.dictation_page)
         dictation_l.setContentsMargins(0, 0, 0, 0)
@@ -4458,6 +4548,7 @@ class DeYazWindow(QMainWindow):
         dictation_left_l.setSpacing(14)
         dictation_left_l.addWidget(self.dictation_mode_bar)
         dictation_left_l.addWidget(self.dictation_audio_bar)
+        dictation_left_l.addWidget(self.dictation_model_bar)
         dictation_left_l.addWidget(self.hero_card, 1)
         # Reuse the card's existing effect for RecordButton's pulse animation.
         # This avoids stacking two effects and keeps the glow inside the real
@@ -4903,10 +4994,10 @@ class DeYazWindow(QMainWindow):
             rule.setStyleSheet("background: #292C2A; border: 0;")
 
     def _update_dictation_result_layout(self):
-        """Match the reference: centered recorder until an actual result exists."""
+        """Keep an opened result workspace stable even after its text is cleared."""
         if not hasattr(self, "dictation_workspace"):
             return
-        show_result = bool(self.latest_result_text.strip())
+        show_result = bool(self._dictation_result_open)
         self.dictation_workspace.removeWidget(self.dictation_left)
         self.dictation_workspace.removeWidget(self.recent_card)
         if show_result:
@@ -5093,6 +5184,8 @@ class DeYazWindow(QMainWindow):
         self.settings_mobile_nav.hide()
         for key, button in self.surface_buttons.items():
             button.setChecked(key == surface)
+        if surface != previous_surface and not force and surface in self.surface_buttons:
+            self._animate_surface_tab(self.surface_buttons[surface])
         if surface == "dictation":
             self._update_dictation_result_layout()
         self.refresh_auth_gate()
@@ -5114,16 +5207,43 @@ class DeYazWindow(QMainWindow):
         if old_effect is not None:
             page.setGraphicsEffect(None)
         effect = QGraphicsOpacityEffect(page)
-        effect.setOpacity(0.42)
+        effect.setOpacity(0.18)
         page.setGraphicsEffect(effect)
         animation = QPropertyAnimation(effect, b"opacity", self)
-        animation.setDuration(180)
-        animation.setStartValue(0.42)
+        animation.setDuration(240)
+        animation.setStartValue(0.18)
         animation.setEndValue(1.0)
         animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         animation.finished.connect(lambda: page.setGraphicsEffect(None))
         setattr(self, slot, animation)
         setattr(self, f"{slot}_page", page)
+        animation.start()
+
+    def _animate_surface_tab(self, button):
+        """Give the selected tab a brief, non-blocking accent glow."""
+        old_animation = getattr(self, "surface_tab_animation", None)
+        if old_animation:
+            old_animation.stop()
+        old_button = getattr(self, "surface_tab_animation_button", None)
+        if old_button is not None and old_button is not button:
+            old_button.setGraphicsEffect(None)
+        effect = QGraphicsDropShadowEffect(button)
+        effect.setOffset(0, 2)
+        effect.setBlurRadius(4)
+        effect.setColor(QColor(self.theme_tokens["accent"]))
+        button.setGraphicsEffect(effect)
+        animation = QPropertyAnimation(effect, b"blurRadius", self)
+        animation.setDuration(320)
+        animation.setStartValue(4.0)
+        animation.setKeyValueAt(0.48, 22.0)
+        animation.setEndValue(7.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.finished.connect(
+            lambda: button.setGraphicsEffect(None)
+            if button.graphicsEffect() is effect else None
+        )
+        self.surface_tab_animation = animation
+        self.surface_tab_animation_button = button
         animation.start()
 
     def open_history_drawer(self):
@@ -5212,6 +5332,7 @@ class DeYazWindow(QMainWindow):
             self.ui_language.blockSignals(False)
         for action in self.language_menu.actions():
             action.setChecked(action.property("language_code") == code)
+        self.refresh_dictation_models()
         self.refresh_file_transcribe_models()
         localize_widget_tree(self.centralWidget())
         self.retranslate_actions()
@@ -5227,6 +5348,7 @@ class DeYazWindow(QMainWindow):
         code = self.ui_language.currentData() or "auto"
         self.conf["ui_language"] = code
         self.conf.save()
+        self.refresh_dictation_models()
         self.refresh_file_transcribe_models()
         localize_widget_tree(self.centralWidget())
         self.retranslate_actions()
@@ -5255,7 +5377,109 @@ class DeYazWindow(QMainWindow):
             self.cleanup_model.setCurrentIndex(index)
         if hasattr(self, "text_model_display"):
             self.text_model_display.setText(cleanup_model)
+        self.refresh_dictation_models()
         self.refresh_file_transcribe_models()
+
+    def refresh_dictation_models(self):
+        """Keep the two Dictation selectors aligned with the active targets."""
+        if not hasattr(self, "dictation_transcribe_model"):
+            return
+        transcribe_current = (
+            f"{self.conf.get('transcribe_provider', 'openai')}|"
+            f"{self.conf.transcribe_target().model}"
+        )
+        cleanup_current = (
+            f"{self.conf.get('cleanup_provider', 'openrouter')}|"
+            f"{self.conf.cleanup_target().model}"
+        )
+        available_providers = set()
+        if self.conf.openai_key():
+            available_providers.add("openai")
+        if self.conf.openrouter_key():
+            available_providers.add("openrouter")
+        if not available_providers:
+            available_providers.update(
+                (transcribe_current.split("|", 1)[0],
+                 cleanup_current.split("|", 1)[0])
+            )
+        catalogs = (
+            (
+                self.dictation_transcribe_model,
+                tuple((badge, name, "openai", model, description)
+                      for badge, name, model, description
+                      in OPENAI_TRANSCRIPTION_CHOICES)
+                + tuple((badge, name, "openrouter", model, description)
+                        for badge, name, model, description
+                        in OPENROUTER_TRANSCRIPTION_CHOICES),
+                transcribe_current,
+            ),
+            (
+                self.dictation_text_model,
+                tuple((badge, name, "openai", model, description)
+                      for badge, name, model, description
+                      in OPENAI_CLEANUP_CHOICES)
+                + tuple((badge, name, "openrouter", model, description)
+                        for badge, name, model, description
+                        in OPENROUTER_CLEANUP_CHOICES),
+                cleanup_current,
+            ),
+        )
+        for combo, choices, current in catalogs:
+            combo_providers = set(available_providers)
+            combo_providers.add(current.split("|", 1)[0])
+            show_provider = len(combo_providers) > 1
+            combo.blockSignals(True)
+            combo.clear()
+            for badge, name, provider, model, description in choices:
+                if provider not in combo_providers:
+                    continue
+                combo.addItem(
+                    (f"{name} · {'OpenAI' if provider == 'openai' else 'OpenRouter'}"
+                     if show_provider else name),
+                    f"{provider}|{model}",
+                )
+                combo.setItemData(
+                    combo.count() - 1,
+                    f"{i18n.t(badge)} · {i18n.t(description)}",
+                    Qt.ItemDataRole.ToolTipRole,
+                )
+            index = combo.findData(current)
+            combo.setCurrentIndex(max(0, index))
+            combo.blockSignals(False)
+
+    def dictation_transcribe_model_changed(self):
+        value = self.dictation_transcribe_model.currentData() or ""
+        if "|" not in value:
+            return
+        provider, model = value.split("|", 1)
+        self.conf["transcribe_provider"] = provider
+        if provider == "openai":
+            self.conf["transcribe_model"] = model
+        else:
+            self.conf["openrouter_transcribe_model"] = model
+        self.conf.save()
+        if hasattr(self, "transcribe_model"):
+            self.transcribe_model.setText(model)
+
+    def dictation_text_model_changed(self):
+        value = self.dictation_text_model.currentData() or ""
+        if "|" not in value:
+            return
+        provider, model = value.split("|", 1)
+        self.conf["cleanup_provider"] = provider
+        self.conf["cleanup_model"] = model
+        if provider == "openai":
+            self.conf["openai_cleanup_model"] = model
+        else:
+            self.conf["openrouter_cleanup_model"] = model
+        self.conf.save()
+        if hasattr(self, "cleanup_model"):
+            index = self.cleanup_model.findData(model)
+            if index < 0:
+                self.cleanup_model.addItem(model, model)
+                index = self.cleanup_model.findData(model)
+            self.cleanup_model.setCurrentIndex(index)
+        self.sync_text_model_display()
 
     def refresh_file_transcribe_models(self):
         if not hasattr(self, "file_transcribe_model"):
@@ -5943,6 +6167,7 @@ class DeYazWindow(QMainWindow):
         self.conf["model_onboarding_complete"] = True
         self.conf.save()
         self.transcribe_model.setText(transcription)
+        self.refresh_dictation_models()
         self.refresh_file_transcribe_models()
         cleanup_index = self.cleanup_model.findData(cleanup)
         if cleanup_index < 0:
@@ -6870,6 +7095,7 @@ class DeYazWindow(QMainWindow):
             return
         if self.recorder.active:
             self.record.setEnabled(False)
+            self.record.set_preparing_active(True)
             self.set_status("Yazı tamamlanır…")
             self.bubble.set_state("preparing")
             self.recorder.stop()
@@ -6880,6 +7106,7 @@ class DeYazWindow(QMainWindow):
         self.recorder.start()
         if self.recorder.active:
             self.bubble.set_recording(True)
+            self.record.set_preparing_active(False)
             self.record.set_recording_active(True)
             self.record.setIcon(line_icon("stop", self.theme_tokens["bg"], 20))
             self.record.setIconSize(QSize(54, 54))
@@ -6903,6 +7130,7 @@ class DeYazWindow(QMainWindow):
     def transcribe(self, path, duration):
         self.bubble.set_state("transcribing")
         self.record.set_recording_active(False)
+        self.record.set_preparing_active(True)
         self.record.setIcon(line_icon("mic", "#202321", 72))
         self.record.setIconSize(QSize(96, 96))
         self.record.setText(
@@ -6980,14 +7208,24 @@ class DeYazWindow(QMainWindow):
             self.bubble.set_state("cleaning")
         elif text.endswith("hazırlanır…"):
             self.bubble.set_state("cleaning")
+        if hasattr(self, "record") and self.current_surface == "dictation":
+            preparing = (
+                text.startswith("Mətnə çevrilir")
+                or text.startswith("Mətn təmizlənir")
+                or text.startswith("Yazı tamamlanır")
+                or text.endswith("hazırlanır…")
+            )
+            self.record.set_preparing_active(preparing)
 
     def complete(self, _raw, text):
         self.app.clipboard().setText(text)
         self.latest_result_text = text.strip()
+        self._dictation_result_open = True
         self.recent_preview.setText(self.latest_result_text)
         self.recent_time.setText(time.strftime("%H:%M"))
         self.copy_recent_button.setEnabled(bool(self.latest_result_text))
         self._update_dictation_result_layout()
+        self.record.set_preparing_active(False)
         self.record.setText("")
         self.record.setIcon(line_icon("mic", "#202321", 72))
         self.record.setIconSize(QSize(96, 96))
@@ -7006,6 +7244,7 @@ class DeYazWindow(QMainWindow):
             self.history_popup.refresh(cfg.read_history(5))
 
     def clear_dictation_result(self):
+        """Clear only generated copy; keep mode, models, context and layout."""
         self.latest_result_text = ""
         self.recent_preview.clear()
         self.recent_time.clear()
@@ -7037,6 +7276,7 @@ class DeYazWindow(QMainWindow):
     def fail(self, message):
         self.bubble.set_state("error", message)
         self.record.set_recording_active(False)
+        self.record.set_preparing_active(False)
         self.record.setIcon(line_icon("mic", "#202321", 72))
         self.record.setIconSize(QSize(96, 96))
         self.record.setText("" if getattr(self, "_template_minimal", False)
@@ -7327,7 +7567,7 @@ class DeYazWindow(QMainWindow):
             self.refresh_page_chrome()
 
         dictation_compact = width < 790
-        dictation_has_result = bool(self.latest_result_text.strip())
+        dictation_has_result = bool(self._dictation_result_open)
         dictation_layout_state = (dictation_compact, dictation_has_result)
         if getattr(self, "_dictation_layout_state", None) != dictation_layout_state:
             self._dictation_layout_state = dictation_layout_state
@@ -7534,12 +7774,19 @@ def main():
         ui_font.setFamily(".AppleSystemUIFont")
     ui_font.setPointSize(10)
     app.setFont(ui_font)
+    requested_command = (
+        "shutdown-for-update" if "--shutdown-for-update" in sys.argv[1:]
+        else "show"
+    )
     existing = QLocalSocket()
     existing.connectToServer(INSTANCE_NAME)
     if existing.waitForConnected(150):
-        existing.write(b"show")
+        existing.write(requested_command.encode("utf-8"))
         existing.flush()
         existing.waitForBytesWritten(300)
+        return 0
+    if requested_command == "shutdown-for-update":
+        # No running instance means the installer can continue immediately.
         return 0
     QLocalServer.removeServer(INSTANCE_NAME)
     single_instance = QLocalServer(app)
@@ -7556,6 +7803,10 @@ def main():
             command = bytes(connection.readAll()).decode("utf-8", "replace").strip()
             if command == "show":
                 window.show_window()
+            elif command == "shutdown-for-update":
+                window.hotkey.stop()
+                window.tray.hide()
+                window.app.quit()
             connection.disconnectFromServer()
 
         connection.readyRead.connect(read_command)

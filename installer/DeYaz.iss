@@ -1,5 +1,5 @@
 #define MyAppName "DeYaz"
-#define MyAppVersion "3.0.7"
+#define MyAppVersion "1.0.6"
 #define MyAppPublisher "Ali Hasanov"
 #define MyAppURL "https://github.com/hasan0v/deyaz"
 #define MyAppExeName "DeYaz.exe"
@@ -50,3 +50,19 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+  if not FileExists(ExpandConstant('{app}\{#MyAppExeName}')) then
+    Exit;
+
+  { Works for every previous version and never waits on the GUI process. }
+  Exec(ExpandConstant('{sys}\taskkill.exe'),
+    '/F /T /IM "{#MyAppExeName}"', '', SW_HIDE, ewWaitUntilTerminated,
+    ResultCode);
+  Sleep(250);
+end;

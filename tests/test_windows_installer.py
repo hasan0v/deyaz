@@ -23,9 +23,9 @@ class WindowsInstallerTests(unittest.TestCase):
         spec = (ROOT / "DeYaz.spec").read_text(encoding="utf-8")
         installer = (ROOT / "installer" / "DeYaz.iss").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
-        self.assertIn('version = "3.0.7"', spec)
-        self.assertIn('#define MyAppVersion "3.0.7"', installer)
-        self.assertIn("DeYaz-Setup-3.0.7-x64.exe", workflow)
+        self.assertIn('version = "1.0.6"', spec)
+        self.assertIn('#define MyAppVersion "1.0.6"', installer)
+        self.assertIn("DeYaz-Setup-1.0.6-x64.exe", workflow)
 
     def test_installed_runtime_uses_one_folder_not_one_file(self):
         spec = (ROOT / "DeYaz.spec").read_text(encoding="utf-8")
@@ -34,10 +34,24 @@ class WindowsInstallerTests(unittest.TestCase):
         self.assertIn("distribution = COLLECT(", spec)
         self.assertIn('Source: "..\\dist\\DeYaz\\*"', installer)
 
+    def test_update_closes_background_instance_before_replacing_files(self):
+        app_source = (ROOT / "deyaz_app.py").read_text(encoding="utf-8")
+        installer = (ROOT / "installer" / "DeYaz.iss").read_text(encoding="utf-8")
+        self.assertIn('"--shutdown-for-update"', app_source)
+        self.assertIn("function PrepareToInstall", installer)
+        self.assertIn('taskkill.exe', installer)
+        self.assertIn('/IM "{#MyAppExeName}"', installer)
+        self.assertNotIn("Exec(AppExe", installer)
+
     def test_surface_switch_uses_short_opacity_transition(self):
         source = inspect.getsource(DeYazWindow._animate_page_entry)
-        self.assertIn("setDuration(180)", source)
+        self.assertIn("setDuration(240)", source)
         self.assertIn('b"opacity"', source)
+
+    def test_surface_tabs_have_a_lightweight_activation_animation(self):
+        source = inspect.getsource(DeYazWindow._animate_surface_tab)
+        self.assertIn("setDuration(320)", source)
+        self.assertIn('b"blurRadius"', source)
 
 
 if __name__ == "__main__":
