@@ -1,17 +1,27 @@
-"""Voice-to-output work modes for the native Windows Dikte app."""
+"""Voice-to-output work modes for the DeYaz desktop app."""
+
+import re
 
 
 WORK_MODES = {
     "dictation": {
-        "name": "Normal Dikte",
-        "short": "Dikte",
-        "color": "#F26440",
+        "name": "Səsyazma",
+        "short": "DeYaz",
+        "color": "#FFC4C7",
+        "prompt": "",
+    },
+    "meeting_notes_live": {
+        "name": "Meeting Notes",
+        "short": "Meeting",
+        "color": "#AFECB9",
+        "project_context": False,
+        "kind": "meeting",
         "prompt": "",
     },
     "prompt_engineer": {
         "name": "Prompt Engineer",
         "short": "Prompt",
-        "color": "#9B7CFF",
+        "color": "#CCBEFF",
         "project_context": "verified",
         "prompt": """You are Prompt Engineer, an elite prompt engineering specialist.
 Your sole mission is to transform poorly written, vague, spoken, or incomplete
@@ -84,7 +94,7 @@ prompt now.""",
     "cover_letter": {
         "name": "Cover Letter / Job",
         "short": "Job",
-        "color": "#4D9FFF",
+        "color": "#A6D7F7",
         "prompt": """You are a senior career writer and evidence-led job application
 specialist. Turn the spoken notes into a tailored, credible cover letter or job
 application message.
@@ -106,7 +116,7 @@ Return only the ready-to-send application text.""",
     "client_email": {
         "name": "Client / Professional Email",
         "short": "Email",
-        "color": "#47C98A",
+        "color": "#AFECB9",
         "prompt": """You are an expert business communication editor. Convert the
 spoken notes into a polished email, client reply, follow-up, status update, or
 professional message.
@@ -126,7 +136,7 @@ Return only the send-ready message.""",
     "social_copy": {
         "name": "Social Media Copy",
         "short": "Social",
-        "color": "#F3AE3D",
+        "color": "#FFEAA0",
         "prompt": """You are a sharp social content strategist for AI, automation,
 product building and technical education. Turn the spoken idea into publish-ready
 social copy.
@@ -148,7 +158,7 @@ Return only the final post.""",
     "technical_brief": {
         "name": "Technical / Developer Brief",
         "short": "Tech",
-        "color": "#36C2D9",
+        "color": "#9BE8D1",
         "prompt": """You are a senior product engineer who converts spoken ideas into
 implementation-ready technical briefs.
 
@@ -169,7 +179,7 @@ Return only the implementation-ready brief.""",
     "proposal": {
         "name": "Upwork / Client Proposal",
         "short": "Proposal",
-        "color": "#EE6B9E",
+        "color": "#F4B8D0",
         "prompt": """You are a high-conversion proposal writer for AI automation,
 Telegram bots, n8n/Railway workflows, frontend delivery and custom AI products.
 Turn the spoken notes into a tailored client proposal.
@@ -188,9 +198,52 @@ Return only the ready-to-send proposal.""",
     },
 }
 
+CUSTOM_WORK_MODES = {}
+
+
+def normalise_custom_mode(item):
+    """Return a safe persisted custom mode or ``None`` for invalid input."""
+    if not isinstance(item, dict):
+        return None
+    name = str(item.get("name", "")).strip()
+    prompt = str(item.get("prompt", "")).strip()
+    if not name or not prompt:
+        return None
+    raw_id = str(item.get("id", "")).strip().lower()
+    mode_id = re.sub(r"[^a-z0-9_]+", "_", raw_id or name.lower()).strip("_")
+    if not mode_id or mode_id in WORK_MODES:
+        mode_id = f"custom_{mode_id or 'mode'}"
+    color = str(item.get("color", "#7C8CFF")).strip()
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        color = "#7C8CFF"
+    policy = item.get("project_context", False)
+    if policy not in {True, False, "verified"}:
+        policy = False
+    return {
+        "id": mode_id,
+        "name": name[:80],
+        "short": str(item.get("short") or name).strip()[:18],
+        "color": color.upper(),
+        "prompt": prompt,
+        "project_context": policy,
+    }
+
+
+def set_custom_modes(items):
+    """Replace the runtime custom-mode registry from persisted config data."""
+    CUSTOM_WORK_MODES.clear()
+    for item in items or []:
+        clean = normalise_custom_mode(item)
+        if clean:
+            CUSTOM_WORK_MODES[clean["id"]] = clean
+
+
+def all_modes():
+    return {**WORK_MODES, **CUSTOM_WORK_MODES}
+
 
 def mode(mode_id):
-    return WORK_MODES.get(mode_id, WORK_MODES["dictation"])
+    return all_modes().get(mode_id, WORK_MODES["dictation"])
 
 
 def project_context_policy(mode_id):

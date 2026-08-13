@@ -10,6 +10,6 @@ Public License version 3. The original copyright and license obligations are
 preserved in `LICENSE`. This repository is independently maintained and is not
 an official upstream release or endorsement.
 
-The native Windows interface, floating HUD, Windows global hotkey and tray
-integration, work modes, project-context capture, file summarization workflow,
-branding assets, packaging and Windows launcher were developed for this fork.
+The DeYaz interface, floating HUD, global shortcut and tray integration, work
+modes, project-context capture, file summarization workflow, branding assets and
+multi-platform packaging were developed for this fork.

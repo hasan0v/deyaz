@@ -6,6 +6,8 @@ their timestamps shifted into place.
 """
 
 import contextlib
+import array
+import math
 import os
 import re
 import shutil
@@ -30,6 +32,43 @@ STAMP_RE = re.compile(r"^\[(?:(\d+):)?(\d{1,2}):(\d{2})\]\s*")
 
 class Cancelled(Exception):
     pass
+
+
+def empty_transcript_fallback(target):
+    """Use the proven singing-vocal model only when GPT Transcribe hears nothing."""
+    model = (target.model or "").split("/")[-1]
+    if target.provider == "openai" and model == "gpt-transcribe":
+        return target._replace(model="gpt-4o-transcribe")
+    return None
+
+
+def extract_waveform_peaks(path, count=72):
+    """Extract normalized real-audio peaks for the file preview waveform."""
+    count = max(12, int(count or 72))
+    result = subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-nostdin", "-i", str(path), "-vn",
+            "-ac", "1", "-ar", "240", "-f", "s16le", "pipe:1",
+        ],
+        capture_output=True,
+    )
+    if result.returncode != 0 or not result.stdout:
+        return []
+    samples = array.array("h")
+    samples.frombytes(result.stdout)
+    if not samples:
+        return []
+    bucket = max(1, math.ceil(len(samples) / count))
+    raw = []
+    for start in range(0, len(samples), bucket):
+        values = samples[start:start + bucket]
+        rms = math.sqrt(sum(value * value for value in values) / len(values))
+        raw.append(rms)
+    if len(raw) < count:
+        raw.extend([0.0] * (count - len(raw)))
+    raw = raw[:count]
+    ceiling = max(sorted(raw)[max(0, int(len(raw) * 0.92) - 1)], 1.0)
+    return [max(0.05, min(1.0, math.sqrt(value / ceiling))) for value in raw]
 
 
 class FileTranscriber(QObject):
@@ -77,7 +116,7 @@ class FileTranscriber(QObject):
             if not shutil.which("ffmpeg"):
                 raise api.ApiError(t("ffmpeg not found. Install it to transcribe files."))
 
-            workdir = tempfile.mkdtemp(prefix="dikte-file-")
+            workdir = tempfile.mkdtemp(prefix="deyaz-file-")
             self.progress.emit(t("Converting audio…"))
             wav_path = _to_wav(path, workdir)
             self._check()
@@ -86,7 +125,8 @@ class FileTranscriber(QObject):
             if len(chunks) > 1:
                 self.progress.emit(t("Splitting into {count} chunks…", count=len(chunks)))
 
-            target = conf.transcribe_target()
+            target = conf.file_transcribe_target()
+            active_target = target
             pieces = []
             segments = []
             for index, (chunk_path, offset) in enumerate(chunks, start=1):
@@ -95,24 +135,54 @@ class FileTranscriber(QObject):
                     t("Transcribing chunk {index}/{count}…", index=index, count=len(chunks))
                 )
                 if timestamps:
-                    segments.extend(
-                        (start + offset, end + offset, line)
-                        for start, end, line in api.transcribe_segments(
-                            target,
-                            chunk_path,
+                    try:
+                        chunk_segments = api.transcribe_segments(
+                            active_target, chunk_path,
                             language=(language or conf["language"]).replace("auto", ""),
                             prompt=conf["transcribe_prompt"],
                         )
+                    except api.EmptyTranscriptError:
+                        fallback = empty_transcript_fallback(active_target)
+                        if fallback is None:
+                            raise
+                        self.progress.emit(
+                            "GPT Transcribe vokal aşkarlamadı — "
+                            "GPT-4o Transcribe ilə yenidən yoxlanılır…"
+                        )
+                        active_target = fallback
+                        chunk_segments = api.transcribe_segments(
+                            active_target, chunk_path,
+                            language=(language or conf["language"]).replace("auto", ""),
+                            prompt=conf["transcribe_prompt"],
+                        )
+                    segments.extend(
+                        (start + offset, end + offset, line)
+                        for start, end, line in chunk_segments
                     )
                     pieces = [f"[{format_timestamp(start)}] {line}"
                               for start, _, line in segments]
                 else:
-                    pieces.append(api.transcribe(
-                        target,
-                        chunk_path,
-                        language=(language or conf["language"]).replace("auto", ""),
-                        prompt=conf["transcribe_prompt"],
-                    ))
+                    try:
+                        chunk_text = api.transcribe(
+                            active_target, chunk_path,
+                            language=(language or conf["language"]).replace("auto", ""),
+                            prompt=conf["transcribe_prompt"],
+                        )
+                    except api.EmptyTranscriptError:
+                        fallback = empty_transcript_fallback(active_target)
+                        if fallback is None:
+                            raise
+                        self.progress.emit(
+                            "GPT Transcribe vokal aşkarlamadı — "
+                            "GPT-4o Transcribe ilə yenidən yoxlanılır…"
+                        )
+                        active_target = fallback
+                        chunk_text = api.transcribe(
+                            active_target, chunk_path,
+                            language=(language or conf["language"]).replace("auto", ""),
+                            prompt=conf["transcribe_prompt"],
+                        )
+                    pieces.append(chunk_text)
 
             text = "\n".join(pieces) if timestamps else " ".join(pieces)
 
@@ -142,23 +212,27 @@ class FileTranscriber(QObject):
 
     def _cleanup(self, text, timestamps):
         conf = self.conf
+        target = conf.cleanup_target()
         prompt = conf.cleanup_prompt(with_timestamps=timestamps, subtitles=True)
         out = []
         for block in split_text(text, timestamps):
             self._check()
             out.append(api.cleanup(
                 block,
-                conf.openrouter_key(),
-                conf["cleanup_model"],
+                target.api_key,
+                target.model,
                 prompt,
                 reasoning=conf["cleanup_reasoning"],
-                base_url=conf["openrouter_base_url"],
+                base_url=target.base_url,
+                provider=target.provider,
+                service=target.service,
             ))
         return ("\n" if timestamps else "\n\n").join(out)
 
     def _transform(self, text, timestamps, result_type, output_language,
                    summary_focus):
         """Translate or reshape a transcript without treating it as instructions."""
+        target = self.conf.cleanup_target()
         language_rule = (
             "Write only in natural Azerbaijani. Translate faithfully where needed."
             if output_language == "az"
@@ -217,11 +291,13 @@ Return only the requested result, without a preamble or closing note."""
                 )
             results.append(api.cleanup(
                 block,
-                self.conf.openrouter_key(),
-                self.conf["cleanup_model"],
+                target.api_key,
+                target.model,
                 part_prompt,
                 reasoning=self.conf["cleanup_reasoning"],
-                base_url=self.conf["openrouter_base_url"],
+                base_url=target.base_url,
+                provider=target.provider,
+                service=target.service,
                 timeout=300,
             ))
 
@@ -239,11 +315,13 @@ Return only the requested result, without a preamble or closing note."""
         )
         return api.cleanup(
             combined,
-            self.conf.openrouter_key(),
-            self.conf["cleanup_model"],
+            target.api_key,
+            target.model,
             consolidate_prompt,
             reasoning=self.conf["cleanup_reasoning"],
-            base_url=self.conf["openrouter_base_url"],
+            base_url=target.base_url,
+            provider=target.provider,
+            service=target.service,
             timeout=300,
         )
 

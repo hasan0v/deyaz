@@ -1,14 +1,16 @@
-"""Safe, dynamic foreground-app and project context for Windows Dikte modes."""
+"""Safe, dynamic foreground-app and project context for DeYaz modes."""
 
 from dataclasses import dataclass
 import ctypes
-from ctypes import wintypes
 import json
 import os
 from pathlib import Path
 import platform
 
 import psutil
+
+if os.name == "nt":
+    from ctypes import wintypes
 
 
 PROJECT_MARKERS = (
@@ -55,6 +57,8 @@ class ContextSnapshot:
 
 
 def _foreground_window():
+    if os.name != "nt":
+        return 0, "", 0
     user32 = ctypes.windll.user32
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
@@ -339,7 +343,7 @@ def capture_context(manual_project_dir=""):
             lines.append(f"Detection evidence: {evidence}")
         lines.append(_project_summary(root))
 
-    label = root.name if root else (title[:42] or app_name or "Windows")
+    label = root.name if root else (title[:42] or app_name or platform.system())
     return ContextSnapshot(
         text="\n".join(lines)[:9000],
         label=label,

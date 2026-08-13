@@ -1,6 +1,6 @@
 # Architecture
 
-Dikte is a native Windows desktop application. It keeps capture, transcription, context collection, transformation, and UI responsibilities separated so that providers and work modes can evolve independently.
+DeYaz is a native cross-platform desktop application. It keeps capture, transcription, context collection, transformation, and UI responsibilities separated so that providers, platforms and work modes can evolve independently.
 
 ## Runtime flow
 
@@ -26,18 +26,19 @@ HUD result -> clipboard / active input / TXT / SRT
 
 | Module | Responsibility |
 |---|---|
-| `dikte_windows.py` | Desktop lifecycle, global shortcut, tray, capture, and HUD orchestration |
+| `deyaz_app.py` | Desktop lifecycle, global shortcut, tray, capture, and HUD orchestration |
 | `api.py` | Provider-facing transcription and text-processing calls |
 | `filetranscribe.py` | Media transcription, chunking, progress, and export |
 | `project_context.py` | Bounded collection of active project context |
 | `work_modes.py` | Prompt and behavior contracts for each work mode |
 | `config.py` | Local configuration and provider selection |
-| `i18n.py` | Azerbaijani, English, and Turkish UI strings |
+| `i18n.py` | Azerbaijani, English, Turkish, and Russian UI strings |
 
 ## Active project detection
 
-Dikte does not trust an editor name or a window title as a stack detector. When
-the global shortcut is pressed, it starts from the foreground Windows process
+DeYaz does not trust an editor name or a window title as a stack detector. When
+the global shortcut is pressed, it starts from the foreground process where the
+platform exposes that information
 and scores project roots evidenced by:
 
 - the foreground process and its working directory;
@@ -48,8 +49,8 @@ and scores project roots evidenced by:
 - repository markers such as `.git`, `package.json`, `pyproject.toml`,
   `requirements.txt`, solution files and common build manifests.
 
-This covers Codex Desktop, VS Code, Cursor, Windsurf, Claude Code inside Windows
-Terminal, Visual Studio and JetBrains-style editor process trees without making
+This covers Codex Desktop, VS Code, Cursor, Windsurf, Claude Code inside a
+terminal, Visual Studio and JetBrains-style editor process trees without making
 their presence a hard dependency. If several related project roots are open and
 the active one cannot be distinguished, detection is marked ambiguous and its
 context is not sent. The user-selected fallback directory remains the explicit
@@ -71,7 +72,9 @@ workspace contents are not scanned.
 
 ## Design constraints
 
-- Windows 10 and 11 are the supported operating systems.
+- Windows 10/11 is the full-featured reference platform.
+- macOS and Linux support dictation, file transcription and mic-only meetings;
+  global input permissions and Wayland restrictions are surfaced instead of hidden.
 - The HUD must never block the user's active application longer than necessary.
 - Provider failures must leave the original clipboard and input state recoverable.
 - File transcription must preserve chunk order and export deterministic timestamps.

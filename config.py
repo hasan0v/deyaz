@@ -1,4 +1,4 @@
-"""Persistent settings and history for the native Windows application."""
+"""Persistent settings and history for the cross-platform DeYaz application."""
 
 import hashlib
 import json
@@ -7,6 +7,7 @@ import pathlib
 import shutil
 
 import api
+import credential_store
 import i18n
 
 
@@ -15,11 +16,15 @@ def _storage_root(variable, fallback):
 
 
 if os.name == "nt":
-    CONFIG_DIR = _storage_root("APPDATA", "~/.config") / "Dikte"
-    DATA_DIR = _storage_root("LOCALAPPDATA", "~/.local/share") / "Dikte"
+    CONFIG_DIR = _storage_root("APPDATA", "~/.config") / "DeYaz"
+    DATA_DIR = _storage_root("LOCALAPPDATA", "~/.local/share") / "DeYaz"
+    LEGACY_CONFIG_DIR = _storage_root("APPDATA", "~/.config") / "Dikte"
+    LEGACY_DATA_DIR = _storage_root("LOCALAPPDATA", "~/.local/share") / "Dikte"
 else:
-    CONFIG_DIR = _storage_root("XDG_CONFIG_HOME", "~/.config") / "dikte"
-    DATA_DIR = _storage_root("XDG_DATA_HOME", "~/.local/share") / "dikte"
+    CONFIG_DIR = _storage_root("XDG_CONFIG_HOME", "~/.config") / "deyaz"
+    DATA_DIR = _storage_root("XDG_DATA_HOME", "~/.local/share") / "deyaz"
+    LEGACY_CONFIG_DIR = _storage_root("XDG_CONFIG_HOME", "~/.config") / "dikte"
+    LEGACY_DATA_DIR = _storage_root("XDG_DATA_HOME", "~/.local/share") / "dikte"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 HISTORY_FILE = DATA_DIR / "history.jsonl"
 RECORDINGS_DIR = DATA_DIR / "recordings"
@@ -27,21 +32,47 @@ MEETINGS_DIR = DATA_DIR / "meetings"
 MEETINGS_FILE = DATA_DIR / "meetings.jsonl"
 
 
-def _migrate_legacy_windows_data():
-    """Move pre-standalone data once, without overwriting newer Windows data."""
-    if os.name != "nt":
-        return
-    legacy_config = pathlib.Path.home() / ".config" / "dikte" / "config.json"
-    legacy_history = pathlib.Path.home() / ".local" / "share" / "dikte" / "history.jsonl"
-    for source, destination in (
-        (legacy_config, CONFIG_FILE), (legacy_history, HISTORY_FILE)
-    ):
-        if source.exists() and not destination.exists():
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+def _migrate_legacy_data():
+    """Copy previous Dikte data once without overwriting current DeYaz files."""
+    sources = (
+        (LEGACY_CONFIG_DIR / "config.json", CONFIG_FILE),
+        (LEGACY_DATA_DIR / "history.jsonl", HISTORY_FILE),
+        (LEGACY_DATA_DIR / "meetings.jsonl", MEETINGS_FILE),
+    )
+    # Very old Windows builds wrote Linux-style folders below the home directory.
+    if os.name == "nt":
+        sources += (
+            (pathlib.Path.home() / ".config" / "dikte" / "config.json", CONFIG_FILE),
+            (pathlib.Path.home() / ".local" / "share" / "dikte" / "history.jsonl", HISTORY_FILE),
+        )
+    for source, destination in sources:
+        try:
+            if source.exists() and not destination.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+        except OSError:
+            # A locked or policy-restricted legacy folder must never prevent
+            # the standalone Windows app from starting with its current data.
+            continue
+    for folder_name in ("recordings", "meetings"):
+        source_root = LEGACY_DATA_DIR / folder_name
+        destination_root = DATA_DIR / folder_name
+        if not source_root.is_dir():
+            continue
+        try:
+            for source in source_root.rglob("*"):
+                if not source.is_file():
+                    continue
+                destination = destination_root / source.relative_to(source_root)
+                if destination.exists():
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+        except OSError:
+            continue
 
 
-_migrate_legacy_windows_data()
+_migrate_legacy_data()
 
 CLEANUP_PROMPT_EN = """You clean up dictation transcripts. You are given the raw
 text of something spoken out loud. Make it readable with MINIMAL interference.
@@ -318,7 +349,7 @@ PARTICIPANTS_RULE_TR = ("\n\nTOPLANTIDAKİ KİŞİLER\n{participants}\n"
                         "yazımla kullan; yine de bir satırı ancak transkript açık "
                         "ediyorsa bunlardan birine bağla.")
 
-ASSISTANT_PROMPT_EN = """This request reached you from Dikte, a dictation tool.
+ASSISTANT_PROMPT_EN = """This request reached you from DeYaz, a dictation tool.
 What you are reading was spoken out loud and turned into text by a speech model,
 so a word here and there may have come through wrong. Read it for what was
 meant, not for what it says letter by letter.
@@ -350,7 +381,7 @@ follow, and no way to answer a question you ask back.
 - If the request is ambiguous in a way that changes the answer, give the answer
   under the likelier reading and name the assumption in a clause"""
 
-ASSISTANT_PROMPT_TR = """Bu istek sana Dikte adlı bir dikte uygulamasından geldi.
+ASSISTANT_PROMPT_TR = """Bu istek sana DeYaz adlı bir dikte uygulamasından geldi.
 Okuduğun metin sesli olarak söylendi ve bir konuşma modeli tarafından yazıya
 çevrildi; yer yer bir kelime yanlış geçmiş olabilir. Harfi harfine ne yazdığına
 değil, ne denmek istendiğine bak.
@@ -382,18 +413,25 @@ da senin soracağın soruya verilecek bir yanıt yok.
   ve varsayımını bir yan cümlede söyle"""
 
 DEFAULTS = {
-    "ui_language": "auto",          # auto | az | en | tr
+    "ui_language": "auto",          # auto | az | en | tr | ru
+    "appearance": "auto",           # auto | light | dark
     "openai_api_key": "",
     "openai_base_url": "https://api.openai.com/v1",
     "openrouter_api_key": "",
     "openrouter_base_url": "https://openrouter.ai/api/v1",
     "transcribe_provider": "openai",  # openai | openrouter
-    "transcribe_model": "gpt-4o-transcribe",           # used when provider is openai
-    "openrouter_transcribe_model": "openai/gpt-4o-transcribe",
-    "language": "az",
+    "transcribe_model": "gpt-transcribe",           # used when provider is openai
+    "openrouter_transcribe_model": "mistralai/voxtral-mini-transcribe",
+    "model_onboarding_complete": False,
+    "language": "auto",
+    "auto_language_default_v2": False,
+    "meeting_language_settings_v2": False,
     "transcribe_prompt": "",
     "cleanup_enabled": True,
+    "cleanup_provider": "openrouter",  # openai | openrouter
     "cleanup_model": "google/gemini-3.5-flash-lite",
+    "openrouter_cleanup_model": "google/gemini-3.5-flash-lite",
+    "openai_cleanup_model": "gpt-5.6-luna",
     "cleanup_reasoning": "",        # empty -> whatever the model does by default
     "cleanup_prompt": "",           # empty -> language-specific default
     "auto_paste": True,
@@ -419,13 +457,21 @@ DEFAULTS = {
     "file_output_language": "original",  # original | az
     "file_result_type": "transcript",    # transcript | summary presets
     "file_summary_focus": "",
+    "file_transcribe_provider": "openai",  # independent from DeYaz mode
+    "file_transcribe_model": "gpt-transcribe",
 
     # --- meetings ---------------------------------------------------------
     "meeting_mic_target": "",       # empty -> whatever dictation records with
     "meeting_system_target": "",    # empty -> the default sink's monitor
-    "meeting_language": "",         # empty -> the dictation speech language
+    "meeting_language": "auto",
+    "meeting_transcribe_provider": "openai",
+    "meeting_transcribe_model": "gpt-transcribe",
+    "meeting_text_provider": "openai",
+    "meeting_text_model": "gpt-5.6-terra",
+    "meeting_live_output_language": "original",  # original | az | en | tr | ru
     "meeting_max_seconds": 14400,   # 4 hours
     "meeting_cleanup": True,
+    "meeting_result_type": "meeting_notes",  # meeting-specific output mode
     "meeting_model": "google/gemini-3.5-flash",
     "meeting_reasoning": "",
     "meeting_prompt": "",           # empty -> language-specific default
@@ -456,8 +502,10 @@ DEFAULTS = {
     "windows_mic_device": "",
     "modify_preset": "balanced",
     "work_mode": "dictation",
+    "custom_work_modes": [],
     "context_enabled": True,
     "context_project_dir": "",
+    "context_items": [],
     "mini_corner": "bottom-right",
     "mini_position_y": -1,
 }
@@ -481,6 +529,29 @@ _CORNER_MIGRATION = {
     "sol-üst": "top-left", "sağ-üst": "top-right",
 }
 
+# OpenRouter still lists Nova-3, but its only provider can be unroutable and
+# returns HTTP 404. Move existing DeYaz installations to the active low-latency
+# recommendation instead of leaving the selected transcription path broken.
+_TRANSCRIBE_MODEL_MIGRATION = {
+    "deepgram/nova-3": "mistralai/voxtral-mini-transcribe",
+    "x-ai/grok-stt-1.0": "mistralai/voxtral-mini-transcribe",
+    # These OpenAI-backed OpenRouter routes currently return an upstream 401
+    # for the user's account. Keep OpenRouter-only installs on a verified route.
+    "openai/gpt-4o-mini-transcribe": "mistralai/voxtral-mini-transcribe",
+    "openai/gpt-4o-transcribe": "mistralai/voxtral-mini-transcribe",
+    "openai/gpt-transcribe": "mistralai/voxtral-mini-transcribe",
+    "openai/whisper-large-v3": "openai/whisper-large-v3-turbo",
+}
+
+_OPENAI_TRANSCRIBE_MODEL_MIGRATION = {
+    "whisper-1": "gpt-4o-mini-transcribe",
+}
+
+_CLEANUP_MODEL_MIGRATION = {
+    "openai/gpt-5-mini": "openai/gpt-5.6-luna",
+    "gpt-5-mini": "gpt-5.6-luna",
+}
+
 
 class Config:
     def __init__(self):
@@ -496,14 +567,103 @@ class Config:
         except FileNotFoundError:
             pass
         except (json.JSONDecodeError, OSError) as exc:
-            print(f"dikte: could not read settings ({exc}), using defaults")
+            print(f"deyaz: could not read settings ({exc}), using defaults")
         self.data["overlay_corner"] = _CORNER_MIGRATION.get(
             self.data["overlay_corner"], self.data["overlay_corner"]
         )
+        previous_transcribe_model = self.data["openrouter_transcribe_model"]
+        self.data["openrouter_transcribe_model"] = _TRANSCRIBE_MODEL_MIGRATION.get(
+            previous_transcribe_model, previous_transcribe_model
+        )
+        model_was_migrated = (
+            self.data["openrouter_transcribe_model"] != previous_transcribe_model
+        )
+        previous_openai_transcribe = self.data["transcribe_model"]
+        self.data["transcribe_model"] = _OPENAI_TRANSCRIBE_MODEL_MIGRATION.get(
+            previous_openai_transcribe, previous_openai_transcribe
+        )
+        previous_meeting_transcribe = self.data["meeting_transcribe_model"]
+        self.data["meeting_transcribe_model"] = _OPENAI_TRANSCRIBE_MODEL_MIGRATION.get(
+            previous_meeting_transcribe, previous_meeting_transcribe
+        )
+        previous_file_transcribe = self.data["file_transcribe_model"]
+        if self.data["file_transcribe_provider"] == "openrouter":
+            self.data["file_transcribe_model"] = _TRANSCRIBE_MODEL_MIGRATION.get(
+                previous_file_transcribe, previous_file_transcribe
+            )
+        else:
+            self.data["file_transcribe_model"] = _OPENAI_TRANSCRIBE_MODEL_MIGRATION.get(
+                previous_file_transcribe, previous_file_transcribe
+            )
+        model_was_migrated = model_was_migrated or (
+            self.data["transcribe_model"] != previous_openai_transcribe
+            or self.data["meeting_transcribe_model"] != previous_meeting_transcribe
+            or self.data["file_transcribe_model"] != previous_file_transcribe
+        )
+        previous_cleanup_model = self.data["cleanup_model"]
+        self.data["cleanup_model"] = _CLEANUP_MODEL_MIGRATION.get(
+            previous_cleanup_model, previous_cleanup_model
+        )
+        self.data["openrouter_cleanup_model"] = _CLEANUP_MODEL_MIGRATION.get(
+            self.data["openrouter_cleanup_model"], self.data["openrouter_cleanup_model"]
+        )
+        self.data["openai_cleanup_model"] = _CLEANUP_MODEL_MIGRATION.get(
+            self.data["openai_cleanup_model"], self.data["openai_cleanup_model"]
+        )
+        if (self.data["openrouter_cleanup_model"]
+                == DEFAULTS["openrouter_cleanup_model"]
+                and self.data["cleanup_provider"] == "openrouter"):
+            self.data["openrouter_cleanup_model"] = self.data["cleanup_model"]
+        cleanup_was_migrated = self.data["cleanup_model"] != previous_cleanup_model
+        auto_language_was_migrated = not bool(
+            self.data.get("auto_language_default_v2", False)
+        )
+        if auto_language_was_migrated:
+            # Older Windows builds defaulted every workflow to Azerbaijani even
+            # when the uploaded file or meeting used another language.
+            self.data["language"] = "auto"
+            self.data["file_language"] = "auto"
+            self.data["meeting_language"] = "auto"
+            self.data["auto_language_default_v2"] = True
+        meeting_language_was_migrated = not bool(
+            self.data.get("meeting_language_settings_v2", False)
+        )
+        if meeting_language_was_migrated:
+            self.data["meeting_language"] = "auto"
+            self.data["meeting_live_output_language"] = "original"
+            self.data["meeting_language_settings_v2"] = True
         stored_prompt = self.data["cleanup_prompt"].strip()
         if stored_prompt and _fingerprint(stored_prompt) in LEGACY_PROMPTS:
             self.data["cleanup_prompt"] = ""
         i18n.set_language(self.data["ui_language"])
+        # One-time migration from the legacy plaintext JSON field. If Windows
+        # secure storage is unavailable, leave the value untouched so existing
+        # installations keep working.
+        legacy_openrouter = self.data["openrouter_api_key"].strip()
+        if legacy_openrouter:
+            try:
+                credential_store.set_secret(
+                    credential_store.OPENROUTER_TARGET, legacy_openrouter,
+                    username="DeYaz migrated key",
+                )
+                self.data["openrouter_api_key"] = ""
+                self.save()
+            except credential_store.CredentialStoreError:
+                pass
+        legacy_openai = self.data["openai_api_key"].strip()
+        if legacy_openai:
+            try:
+                credential_store.set_secret(
+                    credential_store.OPENAI_TARGET, legacy_openai,
+                    username="DeYaz migrated OpenAI key",
+                )
+                self.data["openai_api_key"] = ""
+                self.save()
+            except credential_store.CredentialStoreError:
+                pass
+        elif (model_was_migrated or cleanup_was_migrated
+              or auto_language_was_migrated or meeting_language_was_migrated):
+            self.save()
 
     def save(self):
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -524,11 +684,18 @@ class Config:
         return self.data.get(key, DEFAULTS.get(key, default))
 
     def openai_key(self):
-        """Fall back to the environment when no key is stored."""
-        return self["openai_api_key"].strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+        """Read the OS keychain, then legacy config/environment fallbacks."""
+        secure = credential_store.read_secret(credential_store.OPENAI_TARGET)
+        return (secure or self["openai_api_key"].strip()
+                or os.environ.get("OPENAI_API_KEY", "").strip())
 
     def openrouter_key(self):
-        return self["openrouter_api_key"].strip() or os.environ.get("OPENROUTER_API_KEY", "").strip()
+        try:
+            secure = credential_store.migrate_legacy_openrouter_secret()
+        except credential_store.CredentialStoreError:
+            secure = ""
+        return (secure or self["openrouter_api_key"].strip()
+                or os.environ.get("OPENROUTER_API_KEY", "").strip())
 
     def transcribe_target(self):
         """Key, endpoint and model for whichever provider does speech to text."""
@@ -538,6 +705,58 @@ class Config:
                               self["openrouter_transcribe_model"])
         return api.Target("openai", "OpenAI", self.openai_key(),
                           self["openai_base_url"], self["transcribe_model"])
+
+    def cleanup_target(self):
+        """Credentials and model for post-transcription text cleanup."""
+        if self["cleanup_provider"] == "openai":
+            return api.Target(
+                "openai", "OpenAI", self.openai_key(),
+                self["openai_base_url"], self["openai_cleanup_model"],
+            )
+        return api.Target(
+            "openrouter", "OpenRouter", self.openrouter_key(),
+            self["openrouter_base_url"], self["openrouter_cleanup_model"],
+        )
+
+    def file_transcribe_target(self):
+        """Speech model selected inside File mode, independent of DeYaz mode."""
+        provider = self.get("file_transcribe_provider", "openai")
+        model = self.get("file_transcribe_model", "gpt-transcribe")
+        if provider == "openrouter":
+            return api.Target(
+                "openrouter", "OpenRouter", self.openrouter_key(),
+                self["openrouter_base_url"], model,
+            )
+        return api.Target(
+            "openai", "OpenAI", self.openai_key(),
+            self["openai_base_url"], model,
+        )
+
+    def meeting_transcribe_target(self):
+        """Independent speech model used by Meeting Notes live chunks."""
+        provider = self.get("meeting_transcribe_provider", "openai")
+        model = self.get("meeting_transcribe_model", "gpt-transcribe")
+        if provider == "openrouter":
+            return api.Target(
+                "openrouter", "OpenRouter", self.openrouter_key(),
+                self["openrouter_base_url"], model,
+            )
+        return api.Target(
+            "openai", "OpenAI", self.openai_key(), self["openai_base_url"], model,
+        )
+
+    def meeting_text_target(self):
+        """Independent text/translation model used only by Meeting Notes."""
+        provider = self.get("meeting_text_provider", "openai")
+        model = self.get("meeting_text_model", "gpt-5.6-terra")
+        if provider == "openrouter":
+            return api.Target(
+                "openrouter", "OpenRouter", self.openrouter_key(),
+                self["openrouter_base_url"], model,
+            )
+        return api.Target(
+            "openai", "OpenAI", self.openai_key(), self["openai_base_url"], model,
+        )
 
     def cleanup_prompt(self, with_timestamps=False, with_speakers=False,
                        subtitles=False):
@@ -576,8 +795,41 @@ class Config:
                 out.append(name)
         return "\n".join(out)
 
-    def meeting_prompt(self):
+    def meeting_prompt(self, result_type=None):
         prompt = self["meeting_prompt"].strip() or default_meeting_prompt()
+        result_type = result_type or self.get("meeting_result_type", "meeting_notes")
+        output_rules = {
+            "meeting_notes": "",
+            "key_points": (
+                "\n\nOUTPUT MODE: KEY POINTS\nReturn a short meeting title, the main "
+                "topics, the most important points under each topic, confirmed "
+                "decisions, and action items. Omit minor conversational detail."
+            ),
+            "detailed_summary": (
+                "\n\nOUTPUT MODE: DETAILED SUMMARY\nReturn a structured account with "
+                "meeting topic, agenda or themes, discussion by theme, conclusions, "
+                "decisions, action items, and unresolved questions. Preserve important "
+                "nuance but never invent missing facts."
+            ),
+            "action_items": (
+                "\n\nOUTPUT MODE: ACTION ITEMS\nReturn only confirmed decisions and "
+                "action items. For each action include owner and deadline only when the "
+                "transcript states them; otherwise label them unspecified."
+            ),
+        }
+        prompt += output_rules.get(result_type, "")
+        output_language = self.get("meeting_live_output_language", "original")
+        language_rules = {
+            "original": (
+                "\n\nOUTPUT LANGUAGE: Write in the transcript's original language. "
+                "Do not translate it into English or any other language."
+            ),
+            "az": "\n\nOUTPUT LANGUAGE: Write only in natural Azerbaijani.",
+            "en": "\n\nOUTPUT LANGUAGE: Write only in natural English.",
+            "tr": "\n\nOUTPUT LANGUAGE: Write only in natural Turkish.",
+            "ru": "\n\nOUTPUT LANGUAGE: Write only in natural Russian.",
+        }
+        prompt += language_rules.get(output_language, language_rules["original"])
         people = self.participants()
         if people:
             rule = (PARTICIPANTS_RULE_TR if i18n.language() == "tr"

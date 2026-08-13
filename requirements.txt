@@ -1,5 +1,11 @@
 PyQt6>=6.10
+qtawesome>=1.4,<2
 Pillow>=11
 numpy>=2
 psutil>=7.2
 sounddevice>=0.5
+SoundCard>=0.4.6
+websocket-client>=1.9
+pynput>=1.8
+keyring>=25
+SecretStorage>=3.3; sys_platform == "linux"

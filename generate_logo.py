@@ -1,89 +1,85 @@
-"""Generate Dikte's Windows application icon in PNG and multi-size ICO formats."""
+"""Generate DeYaz's deterministic neo-brutalist desktop logo assets."""
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
-PNG_PATH = ASSETS / "dikte-logo.png"
-ICO_PATH = ASSETS / "dikte.ico"
-CANVAS = 1024
+MASTER_PATH = ASSETS / "deyaz-logo-master.png"
+PNG_PATH = ASSETS / "deyaz-logo.png"
+ICO_PATH = ASSETS / "deyaz.ico"
+ICNS_PATH = ASSETS / "deyaz.icns"
+SVG_PATH = ASSETS / "deyaz-logo.svg"
 
-
-def rounded_mask(size, radius):
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (42, 42, size - 42, size - 42), radius=radius, fill=255
-    )
-    return mask
+SIZE = 1024
+INK = "#202321"
+CREAM = "#FFF9ED"
+CORAL = "#FFB6BE"
+MINT = "#A9ECB8"
 
 
 def make_logo():
-    """Create a crisp microphone mark with transparent rounded corners."""
-    image = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
-    mask = rounded_mask(CANVAS, 224)
-
-    # Subtle mineral-black vertical gradient.
-    background = Image.new("RGBA", image.size)
-    pixels = background.load()
-    for y in range(CANVAS):
-        blend = y / (CANVAS - 1)
-        colour = (
-            int(27 - 12 * blend),
-            int(40 - 17 * blend),
-            int(41 - 17 * blend),
-            255,
-        )
-        for x in range(CANVAS):
-            pixels[x, y] = colour
-    image.alpha_composite(Image.composite(background, Image.new("RGBA", image.size), mask))
-
-    # A restrained glow gives the mark depth without losing small-size clarity.
-    glow = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    glow_draw = ImageDraw.Draw(glow)
-    glow_draw.ellipse((190, 190, 834, 834), fill=(242, 100, 64, 100))
-    glow = glow.filter(ImageFilter.GaussianBlur(76))
-    image.alpha_composite(glow)
-
+    """Draw at 2x resolution so small taskbar sizes keep a clean silhouette."""
+    scale = 2
+    image = Image.new("RGBA", (SIZE * scale, SIZE * scale), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    coral = (242, 100, 64, 255)
-    warm = (255, 131, 91, 255)
-    ink = (18, 23, 24, 255)
-    cream = (246, 235, 226, 255)
 
-    # Concentric signal rings are also the app's recording-state visual language.
-    draw.ellipse((166, 166, 858, 858), outline=(65, 87, 84, 255), width=34)
-    draw.ellipse((220, 220, 804, 804), outline=(242, 100, 64, 150), width=30)
-    draw.ellipse((280, 280, 744, 744), fill=coral)
+    def box(coords, radius, fill, outline=None, width=1):
+        draw.rounded_rectangle(
+            tuple(value * scale for value in coords), radius=radius * scale,
+            fill=fill, outline=outline, width=width * scale,
+        )
 
-    # Tiny highlight on the coral disc.
-    draw.arc((294, 294, 730, 730), 205, 328, fill=warm, width=28)
+    # Slightly offset mint backing gives the hand-built pastel system depth.
+    box((91, 106, 933, 948), 190, INK)
+    box((76, 73, 929, 926), 190, MINT, INK, 34)
+    box((103, 98, 902, 897), 168, CORAL, INK, 38)
 
-    # Bold microphone silhouette: intentionally simple for 16px taskbar rendering.
-    draw.rounded_rectangle((445, 365, 579, 570), radius=67, fill=ink)
-    draw.arc((390, 450, 634, 665), 0, 180, fill=ink, width=38)
-    draw.rounded_rectangle((493, 635, 531, 715), radius=19, fill=ink)
-    draw.rounded_rectangle((425, 695, 599, 733), radius=19, fill=ink)
+    # A geometric D remains legible at 16 px and needs no bundled font.
+    box((278, 260, 758, 764), 238, CREAM)
+    box((420, 380, 629, 644), 112, CORAL)
+    box((278, 260, 414, 764), 62, CREAM)
 
-    # One small light aperture keeps the mark identifiable on dark taskbars.
-    draw.rounded_rectangle((477, 397, 547, 493), radius=35, fill=cream)
-    return image
+    # Three tiny voice bars connect the monogram to speech without obscuring D.
+    for x, top, bottom in ((482, 471, 551), (520, 438, 584), (558, 482, 540)):
+        draw.rounded_rectangle(
+            (x * scale, top * scale, (x + 24) * scale, bottom * scale),
+            radius=12 * scale, fill=INK,
+        )
+
+    return image.resize((SIZE, SIZE), Image.Resampling.LANCZOS)
+
+
+def svg_source():
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect x="91" y="106" width="842" height="842" rx="190" fill="{INK}"/>
+  <rect x="76" y="73" width="853" height="853" rx="190" fill="{MINT}" stroke="{INK}" stroke-width="34"/>
+  <rect x="103" y="98" width="799" height="799" rx="168" fill="{CORAL}" stroke="{INK}" stroke-width="38"/>
+  <rect x="278" y="260" width="480" height="504" rx="238" fill="{CREAM}"/>
+  <rect x="420" y="380" width="209" height="264" rx="112" fill="{CORAL}"/>
+  <rect x="278" y="260" width="136" height="504" rx="62" fill="{CREAM}"/>
+  <rect x="482" y="471" width="24" height="80" rx="12" fill="{INK}"/>
+  <rect x="520" y="438" width="24" height="146" rx="12" fill="{INK}"/>
+  <rect x="558" y="482" width="24" height="58" rx="12" fill="{INK}"/>
+</svg>'''
 
 
 def main():
     ASSETS.mkdir(parents=True, exist_ok=True)
     logo = make_logo()
+    logo.save(MASTER_PATH, "PNG", optimize=True)
     logo.save(PNG_PATH, "PNG", optimize=True)
-    logo.resize((256, 256), Image.Resampling.LANCZOS).save(
-        ICO_PATH,
-        format="ICO",
+    logo.save(
+        ICO_PATH, format="ICO",
         sizes=[(16, 16), (20, 20), (24, 24), (32, 32), (40, 40),
                (48, 48), (64, 64), (128, 128), (256, 256)],
     )
-    print(PNG_PATH)
-    print(ICO_PATH)
+    logo.save(ICNS_PATH, format="ICNS")
+    SVG_PATH.write_text(svg_source(), encoding="utf-8")
+    for path in (PNG_PATH, ICO_PATH, ICNS_PATH, SVG_PATH):
+        print(path)
 
 
 if __name__ == "__main__":

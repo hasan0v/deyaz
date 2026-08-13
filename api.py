@@ -10,14 +10,16 @@ import collections
 import json
 import mimetypes
 import os
+import re
 import secrets
 import urllib.error
 import urllib.request
+import wave
 
 from i18n import t
 
-APP_URL = "https://github.com/hasan0v/dikte-windows"
-USER_AGENT = f"dikte/1.0 (+{APP_URL})"
+APP_URL = "https://github.com/hasan0v/deyaz"
+USER_AGENT = f"deyaz/3.0 (+{APP_URL})"
 OPENAI_URL = "https://api.openai.com/v1"
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
@@ -27,19 +29,25 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1"
 Target = collections.namedtuple("Target", "provider service api_key base_url model")
 
 
-def timestamp_model(provider):
-    """Only whisper-1 returns segment times, and OpenRouter namespaces the id."""
-    return "openai/whisper-1" if provider == "openrouter" else "whisper-1"
-
-
 class ApiError(Exception):
     def __init__(self, message, status=None):
         super().__init__(message)
         self.status = status
 
 
+class EmptyTranscriptError(ApiError):
+    """The request succeeded, but the model detected no transcribable speech."""
+
+
 def explain(exc, service):
     """Turn an HTTP status into something the user can act on."""
+    if exc.status in (401, 402, 403) and "provider returned" in str(exc).lower():
+        return ApiError(
+            t("The selected model provider cannot currently process this "
+              "OpenRouter request (HTTP {code}). Choose another transcription model.",
+              code=exc.status),
+            exc.status,
+        )
     if exc.status in (401, 403):
         return ApiError(t("{service} rejected the API key (HTTP {code}). Open "
                           "Settings and check it.", service=service, code=exc.status),
@@ -63,6 +71,8 @@ def _request(url, data, headers, timeout=120):
         raise ApiError(f"HTTP {exc.code}: {_extract_error(body)}", exc.code) from exc
     except urllib.error.URLError as exc:
         raise ApiError(t("Could not connect: {reason}", reason=exc.reason)) from exc
+    except TimeoutError as exc:
+        raise ApiError(t("Could not connect: request timed out")) from exc
     except json.JSONDecodeError as exc:
         raise ApiError(t("Could not parse the response: {error}", error=exc)) from exc
 
@@ -82,7 +92,7 @@ def _extract_error(body):
 
 def _multipart(fields, file_field, file_path):
     """Build a multipart/form-data body; returns (body, content-type)."""
-    boundary = "----dikte" + secrets.token_hex(16)
+    boundary = "----deyaz" + secrets.token_hex(16)
     out = bytearray()
     for name, value in fields:
         if value is None or value == "":
@@ -112,7 +122,7 @@ def _headers(provider, api_key, content_type=None):
     if provider == "openrouter":
         # What OpenRouter attributes the calls to on its app leaderboard.
         headers["HTTP-Referer"] = APP_URL
-        headers["X-Title"] = "Dikte"
+        headers["X-Title"] = "DeYaz"
     return headers
 
 
@@ -146,35 +156,132 @@ def transcribe(target, wav_path, language="", prompt="", timeout=300):
     )
     text = (data.get("text") or "").strip()
     if not text:
-        raise ApiError(t("Transcript came back empty."))
+        # Transcription providers occasionally acknowledge an audio request
+        # with usage metadata but an empty text field. One retry is safer than
+        # presenting that transient response as a finished empty transcript.
+        data = _transcribe_request(
+            target, wav_path, language, prompt, "json", timeout=timeout
+        )
+        text = (data.get("text") or "").strip()
+    if not text:
+        raise EmptyTranscriptError(t("Transcript came back empty."))
     return text
 
 
 def transcribe_segments(target, wav_path, language="", prompt="", timeout=300):
-    """[(start_seconds, end_seconds, text)] using whisper-1's verbose response."""
-    data = _transcribe_request(
-        target._replace(model=timestamp_model(target.provider)),
-        wav_path, language, prompt, "verbose_json",
-        granularity="segment", timeout=timeout,
+    """Return timed captions while always preserving the selected model.
+
+    Models that support ``verbose_json`` return their native segment timing.
+    JSON-only models fall back to evenly timed, sentence-aware captions made
+    from that same model's transcript; DeYaz never swaps in a legacy model.
+    """
+    model_name = (target.model or "").split("/")[-1]
+    json_only = model_name in {
+        "gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe",
+        "gpt-4o-transcribe-diarize",
+    }
+    if not json_only:
+        try:
+            data = _transcribe_request(
+                target, wav_path, language, prompt, "verbose_json",
+                granularity="segment", timeout=timeout,
+            )
+            native = []
+            for item in data.get("segments") or []:
+                if not isinstance(item, dict):
+                    continue
+                text = str(item.get("text") or "").strip()
+                if not text:
+                    continue
+                try:
+                    start = max(0.0, float(item.get("start") or 0.0))
+                    end = max(start, float(item.get("end") or start))
+                except (TypeError, ValueError):
+                    continue
+                native.append((start, end, text))
+            if native:
+                return native
+            full_text = str(data.get("text") or "").strip()
+            if full_text:
+                return timed_caption_segments(full_text, _wav_duration(wav_path))
+        except ApiError as exc:
+            # A provider may expose the model but not verbose timestamps. Retry
+            # the same model in JSON mode instead of silently substituting one.
+            if exc.status not in (400, 404, 415, 422):
+                raise
+
+    text = transcribe(
+        target, wav_path, language=language, prompt=prompt, timeout=timeout
     )
-    segments = data.get("segments") or []
+    return timed_caption_segments(text, _wav_duration(wav_path))
+
+
+def _wav_duration(path):
+    try:
+        with wave.open(path, "rb") as source:
+            rate = source.getframerate()
+            return source.getnframes() / float(rate) if rate else 0.0
+    except (OSError, wave.Error):
+        return 0.0
+
+
+def _caption_chunks(text, max_chars=96):
+    """Split prose at sentence boundaries, then wrap unusually long lines."""
+    sentences = re.split(r"(?<=[.!?…])\s+", " ".join(str(text).split()))
+    chunks = []
+    current = ""
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if current and len(current) + 1 + len(sentence) <= max_chars:
+            current = f"{current} {sentence}"
+            continue
+        if current:
+            chunks.append(current)
+            current = ""
+        words = sentence.split()
+        line = ""
+        for word in words:
+            candidate = f"{line} {word}".strip()
+            if line and len(candidate) > max_chars:
+                chunks.append(line)
+                line = word
+            else:
+                line = candidate
+        current = line
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def timed_caption_segments(text, duration, fallback_seconds=4.0):
+    """Create readable proportional timings for a transcript without metadata."""
+    chunks = _caption_chunks(text)
+    if not chunks:
+        return []
+    duration = max(0.0, float(duration or 0.0))
+    if duration <= 0:
+        return [
+            (index * fallback_seconds, (index + 1) * fallback_seconds, chunk)
+            for index, chunk in enumerate(chunks)
+        ]
+    weights = [max(1, len(chunk.split())) for chunk in chunks]
+    total = float(sum(weights))
+    elapsed = 0.0
     out = []
-    for seg in segments:
-        text = (seg.get("text") or "").strip()
-        if text:
-            start = float(seg.get("start") or 0.0)
-            end = float(seg.get("end") or 0.0)
-            out.append((start, max(end, start), text))
-    if not out:
-        text = (data.get("text") or "").strip()
-        if not text:
-            raise ApiError(t("Transcript came back empty."))
-        out = [(0.0, 0.0, text)]
+    for index, (chunk, weight) in enumerate(zip(chunks, weights)):
+        start = elapsed
+        elapsed = duration if index == len(chunks) - 1 else min(
+            duration, elapsed + duration * weight / total
+        )
+        out.append((start, max(start + 0.05, elapsed), chunk))
     return out
 
 
 def cleanup(text, api_key, model, system_prompt, reasoning="",
-            base_url=OPENROUTER_URL, timeout=180, context=""):
+            base_url=OPENROUTER_URL, timeout=180, context="",
+            provider="openrouter", service="OpenRouter"):
     if not api_key:
         raise ApiError(t("{service} API key is empty. Add it in Settings.",
                          service="OpenRouter"))
@@ -186,12 +293,16 @@ def cleanup(text, api_key, model, system_prompt, reasoning="",
         )
     payload = {
         "model": model,
-        "temperature": 0,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
     }
+    # GPT-5.6 on OpenAI accepts only its default temperature. OpenRouter can
+    # normalize this parameter for routed models, but the direct API correctly
+    # rejects an explicit zero.
+    if not (provider == "openai" and model.startswith("gpt-5.6")):
+        payload["temperature"] = 0
     # An empty level means "whatever the model does on its own"; anything else is
     # one of OpenRouter's efforts. The thinking itself is never shown, so ask for
     # it to be left out of the reply.
@@ -201,11 +312,11 @@ def cleanup(text, api_key, model, system_prompt, reasoning="",
         data = _request(
             f"{base_url.rstrip('/')}/chat/completions",
             json.dumps(payload).encode("utf-8"),
-            _headers("openrouter", api_key, "application/json"),
+            _headers(provider, api_key, "application/json"),
             timeout=timeout,
         )
     except ApiError as exc:
-        raise explain(exc, "OpenRouter") from None
+        raise explain(exc, service) from None
     choices = data.get("choices") or []
     if not choices:
         raise ApiError(_extract_error(json.dumps(data)))
@@ -268,17 +379,47 @@ def openrouter_key_status(api_key):
     if not api_key:
         raise ApiError(t("{service} API key is empty. Add it in Settings.",
                          service="OpenRouter"))
-    try:
-        data = _get_json(f"{OPENROUTER_URL}/key",
-                         {"Authorization": f"Bearer {api_key}", "User-Agent": USER_AGENT})
-    except ApiError as exc:
-        raise explain(exc, "OpenRouter") from None
-    info = data.get("data") or {}
+    info = openrouter_key_info(api_key)
     limit, usage = info.get("limit"), info.get("usage")
     if limit is None:
         return t("Key works, no spending limit set.")
     return t("Key works. Used {usage} of {limit}.",
              usage=round(float(usage or 0), 3), limit=round(float(limit), 3))
+
+
+def openrouter_key_info(api_key):
+    """Return key limits without exposing the credential itself."""
+    if not api_key:
+        raise ApiError(t("{service} API key is empty. Add it in Settings.",
+                         service="OpenRouter"))
+    try:
+        data = _get_json(
+            f"{OPENROUTER_URL}/key",
+            {"Authorization": f"Bearer {api_key}", "User-Agent": USER_AGENT},
+        )
+    except ApiError as exc:
+        raise explain(exc, "OpenRouter") from None
+    return data.get("data") or {}
+
+
+def openrouter_account_info(api_key):
+    """Return key limits plus the real account credit balance."""
+    info = dict(openrouter_key_info(api_key))
+    try:
+        data = _get_json(
+            f"{OPENROUTER_URL}/credits",
+            {"Authorization": f"Bearer {api_key}", "User-Agent": USER_AGENT},
+        ).get("data") or {}
+        total_credits = float(data.get("total_credits") or 0)
+        total_usage = float(data.get("total_usage") or 0)
+        info["total_credits"] = total_credits
+        info["total_usage"] = total_usage
+        info["account_balance"] = max(0.0, total_credits - total_usage)
+    except ApiError:
+        # A valid key result is still useful if the credits endpoint is
+        # temporarily unavailable.
+        pass
+    return info
 
 
 def openrouter_models(api_key="", transcription=False):
@@ -303,7 +444,7 @@ def openrouter_models(api_key="", transcription=False):
     return sorted(m["id"] for m in models if m.get("id"))
 
 
-def openai_models(api_key, base_url=OPENAI_URL):
+def openai_models(api_key, base_url=OPENAI_URL, transcription=True):
     if not api_key:
         raise ApiError(t("{service} API key is empty. Add it in Settings.",
                          service="OpenAI"))
@@ -315,5 +456,7 @@ def openai_models(api_key, base_url=OPENAI_URL):
     except ApiError as exc:
         raise explain(exc, "OpenAI") from None
     ids = [m["id"] for m in data.get("data", []) if m.get("id")]
+    if not transcription:
+        return sorted(ids)
     audio = [i for i in ids if "transcribe" in i or "whisper" in i]
     return sorted(audio or ids)

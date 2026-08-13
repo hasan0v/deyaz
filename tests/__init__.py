@@ -1,1 +1,1 @@
-"""Regression tests for Dikte Windows."""
+"""Regression tests for DeYaz Windows."""

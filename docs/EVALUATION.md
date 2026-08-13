@@ -1,6 +1,6 @@
 # Evaluation plan
 
-This document defines how Dikte should be evaluated before a release. It intentionally does not publish benchmark numbers that have not been reproduced.
+This document defines how DeYaz should be evaluated before a release. It intentionally does not publish benchmark numbers that have not been reproduced.
 
 ## Quality dimensions
 
@@ -15,7 +15,7 @@ This document defines how Dikte should be evaluated before a release. It intenti
 
 ## Test matrix
 
-- Windows 10 and Windows 11
+- Windows 10/11, macOS 14+, and Ubuntu 22.04+
 - Azerbaijani, English, Turkish, and mixed-language speech
 - Short commands, long-form dictation, noisy audio, and silence
 - OpenAI and OpenRouter provider configurations
@@ -24,7 +24,7 @@ This document defines how Dikte should be evaluated before a release. It intenti
 
 ## Release gate
 
-1. The Windows build workflow completes.
+1. The Windows, macOS, and Linux build matrix completes.
 2. Python source validation passes.
 3. No credential, transcript, or project-content fixture is committed.
 4. Critical capture, insertion, and export paths pass the manual matrix.

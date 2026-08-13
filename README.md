@@ -1,102 +1,87 @@
-# Dikte for Windows
+# DeYaz
 
 <p align="center">
-  <img src="assets/dikte-logo.png" width="150" alt="Dikte logo">
+  <img src="assets/deyaz-logo.png" width="144" alt="DeYaz logo">
 </p>
 
-Windows 10/11 üçün native səsdən-mətn tətbiqi. İstənilən proqramda qlobal qısa
-yolla danışığı yazır, mətni təmizləyir və aktiv input sahəsinə əlavə edir.
+DeYaz danışığı, audio/video fayllarını və görüşləri mətnə çevirən açıq mənbəli
+PyQt6 desktop tətbiqidir. Azərbaycan, türk, ingilis və rus dillərində UI verir.
 
-**Engineering notes:** [Architecture](docs/ARCHITECTURE.md) · [Evaluation plan](docs/EVALUATION.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+## Nə edir
 
-## Əsas imkanlar
+- **Səsyazma:** qlobal qısa yol və daşına bilən mini düymə ilə diktə edir,
+  nəticəni aktiv tətbiqə əlavə edir.
+- **Fayl transkripti:** audio/video oynatma, waveform, timestamp, SRT/TXT/PDF
+  export, təmiz transcript və xülasə hazırlayır.
+- **Görüş qeydi:** canlı transcript və görüş sonu transcript/xülasə/key point
+  nəticələri yaradır.
+- **Kontekst:** seçilmiş layihə, fayl və ya yapışdırılmış mətni work mode-a əlavə
+  edir; mövcud stack barədə olmayan detalı uydurmur.
+- **Provider seçimi:** OpenAI və OpenRouter hesab/açar axınlarını ayrı saxlayır.
 
-- Daşına bilən, animasiyalı mini mikrofon düyməsi
-- Sistem tray menyusu və `Ctrl+Alt+R` qlobal qısa yolu
-- Azərbaycan, ingilis və türk dillərində transkripsiya
-- OpenAI və ya OpenRouter speech-to-text provider-i
-- Prompt Engineer, Cover Letter, Email, Social və başqa rəngli iş modları
-- Aktiv pəncərə və layihədən avtomatik kontekst toplama
-- Son nəticələr, bir kliklə kopyalama və clipboard-a avtomatik əlavə etmə
-- Audio/video fayllarının transkripsiyası, təmizlənməsi və xülasəsi
-- MP3, WAV, M4A, MP4, MKV, WEBM, MOV və AVI dəstəyi
-- TXT və zaman damğalı SRT ixracı
+## Dəstəklənən platformalar
 
-## İşə salmaq
+| Platforma | Paket | Qeyd |
+|---|---|---|
+| Windows 10/11 | `DeYaz-Windows-x64.zip` | Tam dəstək; Meeting Notes mikrofon + sistem səsi |
+| macOS 14+ | `DeYaz-macOS-*.zip` | Mikrofon icazəsi və shortcut/paste üçün Accessibility icazəsi lazımdır |
+| Linux x64 | `DeYaz-Linux-x64.tar.gz` | X11-də qlobal shortcut; Wayland bunu məhdudlaşdıra bilər |
 
-### Hazır EXE
+macOS və Linux-da Meeting Notes hazırda mic-only işləyir. Sistem səsinin tutulması
+OS səviyyəsində virtual audio device və əlavə routing tələb etdiyi üçün yanlış
+“tam dəstək” iddiası edilmir. macOS paketi hələ Apple Developer sertifikatı ilə
+imzalanmadığından ilk açılışda **Open** təsdiqi lazım ola bilər.
 
-[Dikte for Windows v1.0.0](https://github.com/hasan0v/dikte-windows/releases/tag/v1.0.0)
-release səhifəsindən `Dikte.exe` faylını endir və aç. Video
-transkripsiyası üçün [FFmpeg](https://ffmpeg.org/download.html) sistem `PATH`-ında
-olmalıdır.
+## Quraşdırma
 
-### Mənbə kodundan
+Hazır paketləri [Releases](https://github.com/hasan0v/deyaz/releases) səhifəsindən
+endir. Mənbədən işlətmək üçün:
 
-```powershell
-git clone https://github.com/hasan0v/dikte-windows.git
-cd dikte-windows
+```bash
+git clone https://github.com/hasan0v/deyaz.git
+cd deyaz
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python dikte_windows.py
 ```
 
-və ya `Dikte-baslat.bat` faylına iki dəfə kliklə.
-
-## İlkin ayarlar
-
-`Ayarlar → API & Models` bölməsində:
-
-1. OpenAI və ya OpenRouter API açarını əlavə et.
-2. Transkripsiya provider və modelini seç.
-3. Təmizləmə, xülasə və xüsusi iş modları üçün OpenRouter açarı daxil et.
-
-Açarlar yalnız lokal olaraq `%APPDATA%\Dikte\config.json` faylında saxlanılır.
-Tarixçə `%LOCALAPPDATA%\Dikte` qovluğundadır. Köhnə versiyanın məlumatları ilk
-açılışda avtomatik köçürülür.
-
-## File Transcribe
-
-`Ayarlar → File Transcribe` bölməsində audio və ya video seç:
-
-- danışığın dilini avtomatik və ya manual təyin et;
-- nəticəni orijinal dildə və ya Azərbaycanca hazırla;
-- tam transkript, qısa/ətraflı xülasə, görüş qeydləri, action items və ya dərs
-  qeydləri seç;
-- lazım olduqda xüsusi fokus yaz;
-- nəticəni clipboard-a, TXT-yə və ya SRT-yə çıxar.
-
-Uzun media faylları avtomatik hissələrə bölünür. Video səsi API üçün mono 16 kHz
-audioya çevrilir.
-
-## EXE build
+Windows:
 
 ```powershell
+.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m pip install pyinstaller
-python -m PyInstaller --noconfirm --clean Dikte.spec
+python deyaz_app.py
 ```
 
-Nəticə `dist\Dikte.exe` ünvanında yaranır.
+macOS/Linux:
 
-## Layihə quruluşu
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python deyaz_app.py
+```
 
-- `dikte_windows.py` — əsas PyQt6 UI, tray, qlobal hotkey və mini HUD
-- `filetranscribe.py` — media çevirmə, bölmə, transkripsiya və xülasə axını
-- `project_context.py` — aktiv Windows tətbiqi və layihə konteksti
-- `work_modes.py` — rəngli AI iş modları və sistem promptları
-- `api.py` — OpenAI/OpenRouter sorğuları
-- `config.py` — lokal ayarlar və tarixçə
+## Build və test
 
-## Məxfilik
+```bash
+python -m unittest discover -v
+python -m PyInstaller --noconfirm --clean DeYaz.spec
+```
 
-Səs yalnız seçilmiş transkripsiya provider-inə göndərilir. Təmizləmə və xülasə
-aktivdirsə transkript seçilmiş OpenRouter modelinə göndərilir. API açarları
-repoya daxil edilmir.
+PyInstaller cross-compiler deyil. `.github/workflows/build-desktop.yml` hər paketi
+öz native GitHub runner-ində qurur və `v*` tag-larında GitHub Release yaradır.
 
-## Lisenziya və mənşə
+## Məlumat və açarlar
 
-GPL-3.0-or-later. Bu Windows versiyası yusufipk/dikte layihəsindən törəyib,
-amma ayrıca repo, Windows UI, build və runtime axını ilə müstəqil inkişaf edir.
-Ətraflı məlumat üçün [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) faylına bax.
+- Windows: `%APPDATA%\DeYaz` və `%LOCALAPPDATA%\DeYaz`
+- macOS/Linux: `$XDG_CONFIG_HOME/deyaz` və `$XDG_DATA_HOME/deyaz`
+- OpenRouter açarı OS keychain/credential store-da saxlanılır.
+- Köhnə `Dikte` ayarları ilk açılışda yeni qovluğa **kopyalanır**, silinmir.
+- Audio yalnız “saxla” seçimi aktivdirsə qalır; tarixçə lokal saxlanılır.
+
+## Open source
+
+Contributions xoşdur. Başlamazdan əvvəl [CONTRIBUTING.md](CONTRIBUTING.md),
+arxitektura üçün [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), model yoxlamaları
+üçün [docs/EVALUATION.md](docs/EVALUATION.md) fayllarına bax.
+
+GPL-3.0-or-later. Layihənin başlanğıc nöqtəsi `yusufipk/dikte` olub; attribution
+və lisenziya məlumatları [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)-dədir.

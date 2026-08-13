@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import api
-from dikte_windows import Transcription
+from deyaz_app import Transcription
 from project_context import CONTEXT_RULES, ContextSnapshot
 from work_modes import mode, project_context_policy, uses_project_context
 
@@ -25,6 +25,12 @@ class FakeConfig:
     def transcribe_target(self):
         return api.Target("openai", "OpenAI", "test", "https://example.invalid", "test")
 
+    def cleanup_target(self):
+        return api.Target(
+            "openrouter", "OpenRouter", "test",
+            "https://example.invalid", "test-model",
+        )
+
     def openrouter_key(self):
         return "test"
 
@@ -37,8 +43,8 @@ class PromptEngineerSafetyTests(unittest.TestCase):
         self.assertEqual(project_context_policy("prompt_engineer"), "verified")
         self.assertFalse(uses_project_context("prompt_engineer"))
         verified = ContextSnapshot(
-            text="requirements.txt: PyQt6", label="Dikte",
-            project_root="C:/Dikte", confidence="high",
+            text="requirements.txt: PyQt6", label="DeYaz",
+            project_root="C:/DeYaz", confidence="high",
         )
         self.assertTrue(uses_project_context("prompt_engineer", verified))
 
@@ -49,15 +55,15 @@ class PromptEngineerSafetyTests(unittest.TestCase):
         self.assertIn("do not fill it in yourself", prompt)
         self.assertIn("Use every relevant detail the user actually says", prompt)
 
-    @patch("dikte_windows.cfg.append_history")
-    @patch("dikte_windows.api.transcribe", return_value="mövcud layihənin UI-nı yaxşılaşdır")
+    @patch("deyaz_app.cfg.append_history")
+    @patch("deyaz_app.api.transcribe", return_value="mövcud layihənin UI-nı yaxşılaşdır")
     def test_pipeline_does_not_send_unverified_stack_to_prompt_engineer(
         self, _transcribe, _history
     ):
         captured = {}
 
         def fake_cleanup(text, key, model, system_prompt, reasoning, base_url,
-                         context=""):
+                         context="", **_kwargs):
             captured["system_prompt"] = system_prompt
             captured["context"] = context
             return text
@@ -69,34 +75,34 @@ class PromptEngineerSafetyTests(unittest.TestCase):
             confidence="medium",
         )
         pipeline = Transcription(FakeConfig())
-        with patch("dikte_windows.api.cleanup", side_effect=fake_cleanup):
+        with patch("deyaz_app.api.cleanup", side_effect=fake_cleanup):
             pipeline._work("missing-test-audio.wav", 1.0, detected)
 
         self.assertEqual(captured["context"], "")
         self.assertNotIn(CONTEXT_RULES, captured["system_prompt"])
         self.assertNotIn("Framework: React", captured["system_prompt"])
 
-    @patch("dikte_windows.cfg.append_history")
-    @patch("dikte_windows.api.transcribe", return_value="mövcud app-i yaxşılaşdır")
+    @patch("deyaz_app.cfg.append_history")
+    @patch("deyaz_app.api.transcribe", return_value="mövcud app-i yaxşılaşdır")
     def test_pipeline_sends_verified_project_files_to_prompt_engineer(
         self, _transcribe, _history
     ):
         captured = {}
 
         def fake_cleanup(text, key, model, system_prompt, reasoning, base_url,
-                         context=""):
+                         context="", **_kwargs):
             captured["context"] = context
             return text
 
         detected = ContextSnapshot(
             text="README.md excerpt: Native PyQt6 Windows app",
-            label="Dikte",
-            project_root="C:/Dikte",
+            label="DeYaz",
+            project_root="C:/DeYaz",
             confidence="high",
             evidence="pwsh child working directory",
         )
         pipeline = Transcription(FakeConfig())
-        with patch("dikte_windows.api.cleanup", side_effect=fake_cleanup):
+        with patch("deyaz_app.api.cleanup", side_effect=fake_cleanup):
             pipeline._work("missing-test-audio.wav", 1.0, detected)
 
         self.assertIn("Native PyQt6 Windows app", captured["context"])
