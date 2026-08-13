@@ -2250,18 +2250,6 @@ class HistoryPopup(QWidget):
         panel_l.addWidget(scroll, 1)
         localize_widget_tree(self)
 
-    def resizeEvent(self, event):
-        compact = event.size().width() < 600
-        self.mode_root_layout.setContentsMargins(
-            16 if compact else 22, 16 if compact else 22,
-            16 if compact else 22, 16 if compact else 22,
-        )
-        self.mode_form_layout.setRowWrapPolicy(
-            QFormLayout.RowWrapPolicy.WrapAllRows
-            if compact else QFormLayout.RowWrapPolicy.WrapLongRows
-        )
-        super().resizeEvent(event)
-
     def retranslate(self):
         localize_widget_tree(self)
         self.refresh(cfg.read_history(30))

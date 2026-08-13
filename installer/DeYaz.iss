@@ -1,7 +1,8 @@
 #define MyAppName "DeYaz"
-#define MyAppVersion "1.0.6"
+#define MyAppVersion "1.0.7"
 #define MyAppPublisher "Ali Hasanov"
 #define MyAppURL "https://github.com/hasan0v/deyaz"
+#define MyAppSupportURL "https://github.com/hasan0v/deyaz/issues"
 #define MyAppExeName "DeYaz.exe"
 
 [Setup]
@@ -11,7 +12,10 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppSupportURL={#MyAppURL}/issues
+AppCopyright=Copyright (C) 2026 Ali Hasanov
+AppComments=Voice, file and meeting transcription for Windows.
+AppContact={#MyAppSupportURL}
+AppSupportURL={#MyAppSupportURL}
 AppUpdatesURL={#MyAppURL}/releases
 DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
@@ -22,11 +26,15 @@ ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist-installer
 OutputBaseFilename=DeYaz-Setup-{#MyAppVersion}-x64
 SetupIconFile=..\assets\deyaz.ico
+WizardImageFile=..\assets\installer-wizard.bmp
+WizardSmallImageFile=..\assets\installer-small.bmp
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+DisableWelcomePage=no
+ShowLanguageDialog=no
 CloseApplications=yes
 RestartApplications=no
 VersionInfoVersion={#MyAppVersion}.0
@@ -65,4 +73,17 @@ begin
     '/F /T /IM "{#MyAppExeName}"', '', SW_HIDE, ewWaitUntilTerminated,
     ResultCode);
   Sleep(250);
+end;
+
+procedure InitializeWizard;
+begin
+  WizardForm.Caption := 'DeYaz ' + '{#MyAppVersion}' + ' Setup';
+  WizardForm.WelcomeLabel1.Caption := 'Welcome to DeYaz';
+  WizardForm.WelcomeLabel2.Caption :=
+    'Install DeYaz for voice dictation, file transcription and meeting notes.' + #13#10#13#10 +
+    'Created by Ali Hasanov' + #13#10 +
+    '{#MyAppURL}';
+  WizardForm.FinishedHeadingLabel.Caption := 'DeYaz is ready';
+  WizardForm.FinishedLabel.Caption :=
+    'Installation completed successfully. You can now launch DeYaz.';
 end;

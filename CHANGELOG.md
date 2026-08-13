@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.7 — History stability and branded setup
+
+- Fixed the crash triggered by opening the history drawer.
+- Added DeYaz artwork, creator details and product messaging to the Windows installer.
+- Replaced the generic setup artwork with DeYaz-branded wizard assets.
+
 ## 1.0.6 — Installer deadlock fix
 
 - Removed the legacy-app wait that could freeze the installer on Preparing.

@@ -23,9 +23,18 @@ class WindowsInstallerTests(unittest.TestCase):
         spec = (ROOT / "DeYaz.spec").read_text(encoding="utf-8")
         installer = (ROOT / "installer" / "DeYaz.iss").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
-        self.assertIn('version = "1.0.6"', spec)
-        self.assertIn('#define MyAppVersion "1.0.6"', installer)
-        self.assertIn("DeYaz-Setup-1.0.6-x64.exe", workflow)
+        version_info = (ROOT / "version_info.txt").read_text(encoding="utf-8")
+        self.assertIn('version = "1.0.7"', spec)
+        self.assertIn('#define MyAppVersion "1.0.7"', installer)
+        self.assertIn("DeYaz-Setup-1.0.7-x64.exe", workflow)
+        self.assertIn("StringStruct(u'CompanyName', u'Ali Hasanov')", version_info)
+
+    def test_installer_uses_deyaz_brand_assets_and_creator_metadata(self):
+        installer = (ROOT / "installer" / "DeYaz.iss").read_text(encoding="utf-8")
+        self.assertIn("WizardImageFile=..\\assets\\installer-wizard.bmp", installer)
+        self.assertIn("WizardSmallImageFile=..\\assets\\installer-small.bmp", installer)
+        self.assertIn("AppPublisher={#MyAppPublisher}", installer)
+        self.assertIn("Created by Ali Hasanov", installer)
 
     def test_installed_runtime_uses_one_folder_not_one_file(self):
         spec = (ROOT / "DeYaz.spec").read_text(encoding="utf-8")
