@@ -1,30 +1,29 @@
 # Changelog
 
-## 1.0.3 — Native installed runtime
+## 3.0.7 — Native installed runtime
 
 - Changed the installed Windows runtime from PyInstaller one-file to one-folder.
 - Removed the visible parent/child process duplication during installer updates.
 - Improved startup time and further reduced heuristic antivirus risk.
 
-## 1.0.2 — Windows installer and motion polish
+## 3.0.6 — Windows installer and motion polish
 
 - Added a proper per-user Windows installer with Start Menu and uninstall registration.
 - Removed UPX packing to reduce heuristic antivirus false positives.
 - Matched the GitHub button to the header and moved attention to a softly glowing star.
 - Added restrained, layout-safe transitions between the main work surfaces.
 
-## 1.0.1 — Creator links and dictation polish
+## 3.0.5 — Creator links and dictation polish
 
 - Added responsive GitHub and LinkedIn creator actions beside the DeYaz wordmark.
 - Added a restrained glow animation that highlights repository starring without disrupting the header.
 - Removed the duplicate microphone icon from the dictation device selector.
 - Moved the recorder glow to the full card and expanded its gutter so the right edge remains visible.
 
-## 1.0.0 — First stable DeYaz release
+## 3.0.4 — Localization and context stability
 
 - Localized default Meeting Notes speaker labels in AZ, EN, TR and RU.
 - Fixed long context cards forcing their parent columns outside the visible area.
-- Reset the public version line: stable starts at `1.0.0`; previews use `0.x`.
 
 ## 0.5.0 — Responsive UI and English documentation
 

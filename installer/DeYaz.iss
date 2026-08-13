@@ -1,5 +1,5 @@
 #define MyAppName "DeYaz"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "3.0.7"
 #define MyAppPublisher "Ali Hasanov"
 #define MyAppURL "https://github.com/hasan0v/deyaz"
 #define MyAppExeName "DeYaz.exe"

@@ -7,7 +7,6 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
-MASTER_PATH = ASSETS / "deyaz-logo-master.png"
 PNG_PATH = ASSETS / "deyaz-logo.png"
 ICO_PATH = ASSETS / "deyaz.ico"
 ICNS_PATH = ASSETS / "deyaz.icns"
@@ -69,7 +68,6 @@ def svg_source():
 def main():
     ASSETS.mkdir(parents=True, exist_ok=True)
     logo = make_logo()
-    logo.save(MASTER_PATH, "PNG", optimize=True)
     logo.save(PNG_PATH, "PNG", optimize=True)
     logo.save(
         ICO_PATH, format="ICO",
