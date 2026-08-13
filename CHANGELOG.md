@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.2 — UI clipping fixes
+
+- Dictation mode dropdown arrow stays inside the rounded selector.
+- Dictation microphone and record cards keep their full right border and shadow.
+- File player seek handle has enough vertical space and is no longer cropped.
+
 ## 3.0.1 — Localization and context fixes
 
 - File transcription custom focus is always editable and is applied when supplied.

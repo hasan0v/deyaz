@@ -4116,10 +4116,13 @@ class DeYazWindow(QMainWindow):
         dictation_l.setHorizontalSpacing(24)
         dictation_l.setVerticalSpacing(16)
         self.dictation_left = QFrame(objectName="dictationLeft")
-        self.dictation_left.setMinimumWidth(420)
-        self.dictation_left.setMaximumWidth(420)
+        # Keep a small effect gutter around the 420 px cards. Without it,
+        # QGraphicsDropShadowEffect is clipped by the fixed-width parent and
+        # makes the right border look cut off.
+        self.dictation_left.setMinimumWidth(444)
+        self.dictation_left.setMaximumWidth(444)
         dictation_left_l = QVBoxLayout(self.dictation_left)
-        dictation_left_l.setContentsMargins(0, 0, 0, 0)
+        dictation_left_l.setContentsMargins(12, 0, 12, 8)
         dictation_left_l.setSpacing(14)
         dictation_left_l.addWidget(self.dictation_mode_bar)
         dictation_left_l.addWidget(self.dictation_audio_bar)
@@ -4236,6 +4239,9 @@ class DeYazWindow(QMainWindow):
         self.file_position_label = QLabel("00:00", objectName="mediaTime")
         self.file_duration_label = QLabel("00:00", objectName="mediaTime")
         self.file_seek = QSlider(Qt.Orientation.Horizontal, objectName="mediaSeek")
+        # The styled handle is 21 px tall (groove + negative margins). Give it
+        # explicit vertical room so its top and bottom are never clipped.
+        self.file_seek.setFixedHeight(28)
         self.file_seek.setRange(0, 0)
         self.file_seek.sliderMoved.connect(self.seek_file_media)
         seek_row.addWidget(self.file_position_label)
@@ -4448,8 +4454,16 @@ class DeYazWindow(QMainWindow):
         self.dictation_mode.setStyleSheet(f"""
             QComboBox {{ background-color: {c['purple']}; color: #202321;
                 border: 3px solid #292C2A; border-radius: 18px;
-                padding: 10px 18px; font-family: 'Segoe Print';
+                padding: 10px 48px 10px 18px; font-family: 'Segoe Print';
                 font-size: 17px; font-weight: 700; }}
+            QComboBox::drop-down {{
+                subcontrol-origin: padding;
+                subcontrol-position: center right;
+                width: 36px;
+                margin: 5px 7px 5px 0;
+                background: transparent;
+                border: 0;
+            }}
             QComboBox:hover, QComboBox:on {{ border: 4px solid #292C2A; }}
         """)
         self.hero_card.setStyleSheet(
