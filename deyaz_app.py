@@ -100,6 +100,20 @@ def meeting_layout_mode_for_width(width):
     return "stack" if width < 700 else "split" if width < 1180 else "wide"
 
 
+def responsive_density_for_width(width):
+    """Shared density tier for the shell, pages and modal surfaces."""
+    width = max(0, int(width or 0))
+    return "narrow" if width < 640 else "compact" if width < 960 else "roomy"
+
+
+def responsive_content_width(window_width):
+    """Approximate the real page width after adaptive shell gutters."""
+    window_width = max(0, int(window_width or 0))
+    density = responsive_density_for_width(window_width)
+    gutter = 24 if density == "narrow" else 36 if density == "compact" else 52
+    return max(320, min(1240, window_width - gutter))
+
+
 def subtitle_at_position(segments, milliseconds):
     """Return the timed segment visible at the current player position."""
     second = max(0.0, float(milliseconds or 0) / 1000.0)
@@ -617,8 +631,9 @@ class ModelOnboardingDialog(QDialog):
         self.setWindowTitle("DeYaz model seçimi")
         self.setModal(True)
         self.resize(980, 720)
-        self.setMinimumSize(900, 660)
+        self.setMinimumSize(620, 600)
         root = QVBoxLayout(self)
+        self.model_root_layout = root
         root.setContentsMargins(28, 26, 28, 24)
         root.setSpacing(18)
         eyebrow = QLabel("İLK QURAŞDIRMA", objectName="dialogEyebrow")
@@ -635,7 +650,11 @@ class ModelOnboardingDialog(QDialog):
         root.addWidget(eyebrow)
         root.addWidget(title)
         root.addWidget(intro)
-        columns = QHBoxLayout()
+        self.model_switcher = QStackedWidget()
+        self.model_wide_page = QWidget()
+        columns = QHBoxLayout(self.model_wide_page)
+        self.model_columns_layout = columns
+        columns.setContentsMargins(0, 0, 0, 0)
         columns.setSpacing(14)
         self.transcription_list = self._choice_column(
             columns, "1  TRANSKRİPSİYA", "Səsi mətnə çevirən model",
@@ -645,7 +664,13 @@ class ModelOnboardingDialog(QDialog):
             columns, "2  MƏTNİ TƏMİZLƏMƏ", "Durğu, təkrar və iş modları",
             cleanup_choices, available, cleanup_model,
         )
-        root.addLayout(columns, 1)
+        self.transcription_frame = self.transcription_list.parentWidget()
+        self.cleanup_frame = self.cleanup_list.parentWidget()
+        self.model_tabs = QTabWidget(objectName="modelResponsiveTabs")
+        self.model_switcher.addWidget(self.model_wide_page)
+        self.model_switcher.addWidget(self.model_tabs)
+        root.addWidget(self.model_switcher, 1)
+        self._reflow_model_columns(self.width())
         note = QLabel(
             ("Pulsuz seçim yalnız mətn təmizləməyə aiddir. Audio "
              "transkripsiyası üçün OpenRouter krediti lazımdır.")
@@ -680,7 +705,7 @@ class ModelOnboardingDialog(QDialog):
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, model_id)
             item.setToolTip(model_id)
-            item.setSizeHint(QSize(320, 76))
+            item.setSizeHint(QSize(260, 90))
             card = ModelChoiceCard(badge, name, description)
             if available and model_id not in available:
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
@@ -700,6 +725,41 @@ class ModelOnboardingDialog(QDialog):
         parent_layout.addWidget(frame, 1)
         return listing
 
+    def _reflow_model_columns(self, width):
+        compact = width < 760
+        if getattr(self, "_compact_model_columns", None) == compact:
+            return
+        self._compact_model_columns = compact
+        frames = (
+            (self.transcription_frame, "1  TRANSKRİPSİYA"),
+            (self.cleanup_frame, "2  MƏTNİ TƏMİZLƏMƏ"),
+        )
+        if compact:
+            for frame, title in frames:
+                self.model_columns_layout.removeWidget(frame)
+                if self.model_tabs.indexOf(frame) < 0:
+                    self.model_tabs.addTab(frame, title)
+            self.model_switcher.setCurrentWidget(self.model_tabs)
+        else:
+            for frame, _title in frames:
+                index = self.model_tabs.indexOf(frame)
+                if index >= 0:
+                    self.model_tabs.removeTab(index)
+                self.model_columns_layout.addWidget(frame, 1)
+            self.model_switcher.setCurrentWidget(self.model_wide_page)
+        localize_widget_tree(self.model_switcher)
+
+    def resizeEvent(self, event):
+        compact = event.size().width() < 720
+        self._reflow_model_columns(event.size().width())
+        self.model_root_layout.setContentsMargins(
+            16 if compact else 28, 18 if compact else 26,
+            16 if compact else 28, 18 if compact else 24,
+        )
+        self.model_root_layout.setSpacing(12 if compact else 18)
+        self.model_columns_layout.setSpacing(9 if compact else 14)
+        super().resizeEvent(event)
+
     def selected_models(self):
         transcription = self.transcription_list.currentItem()
         cleanup = self.cleanup_list.currentItem()
@@ -718,6 +778,7 @@ class ContextTextDialog(QDialog):
         self.setWindowTitle("Mətni yapışdır")
         self.setModal(True)
         self.resize(620, 390)
+        self.setMinimumSize(460, 340)
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 24, 28, 24)
         root.setSpacing(16)
@@ -750,38 +811,72 @@ class ContextAddDialog(QDialog):
         self.setWindowTitle("Kontekst əlavə et")
         self.setModal(True)
         self.resize(760, 430)
-        self.setMinimumSize(680, 390)
+        self.setMinimumSize(500, 390)
         root = QVBoxLayout(self)
         root.setContentsMargins(42, 30, 42, 36)
         root.setSpacing(26)
         title = QLabel("Kontekst əlavə et", objectName="contextDialogTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(title)
-        choices = QGridLayout()
-        choices.setHorizontalSpacing(20)
-        choices.setVerticalSpacing(18)
-        project = QPushButton("Proyekt\nəlavə et", objectName="contextProjectAction")
-        project.setIcon(line_icon("folder", "#202321", 50))
-        project.setIconSize(QSize(72, 72))
-        project.setMinimumSize(210, 220)
-        project.clicked.connect(self.add_project)
-        paste = QPushButton("Mətni yapışdır", objectName="contextPasteAction")
-        paste.setIcon(line_icon("clipboard", "#202321", 42))
-        paste.setIconSize(QSize(62, 62))
-        paste.setMinimumHeight(104)
-        paste.clicked.connect(self.add_text)
-        upload = QPushButton("Fayl yüklə", objectName="contextFileAction")
-        upload.setIcon(line_icon("upload", "#202321", 42))
-        upload.setIconSize(QSize(62, 62))
-        upload.setMinimumHeight(92)
-        upload.clicked.connect(self.add_file)
-        choices.addWidget(project, 0, 0, 2, 1)
-        choices.addWidget(paste, 0, 1)
-        choices.addWidget(upload, 1, 1)
-        choices.setColumnStretch(0, 2)
-        choices.setColumnStretch(1, 5)
-        root.addLayout(choices, 1)
+        self.choices_layout = QGridLayout()
+        self.choices_layout.setHorizontalSpacing(20)
+        self.choices_layout.setVerticalSpacing(18)
+        self.project_action = QPushButton(
+            "Proyekt\nəlavə et", objectName="contextProjectAction"
+        )
+        self.project_action.setIcon(line_icon("folder", "#202321", 50))
+        self.project_action.setIconSize(QSize(72, 72))
+        self.project_action.clicked.connect(self.add_project)
+        self.paste_action = QPushButton(
+            "Mətni yapışdır", objectName="contextPasteAction"
+        )
+        self.paste_action.setIcon(line_icon("clipboard", "#202321", 42))
+        self.paste_action.setIconSize(QSize(62, 62))
+        self.paste_action.clicked.connect(self.add_text)
+        self.upload_action = QPushButton(
+            "Fayl yüklə", objectName="contextFileAction"
+        )
+        self.upload_action.setIcon(line_icon("upload", "#202321", 42))
+        self.upload_action.setIconSize(QSize(62, 62))
+        self.upload_action.clicked.connect(self.add_file)
+        root.addLayout(self.choices_layout, 1)
+        self._reflow_choices(self.width())
         localize_widget_tree(self)
+
+    def _reflow_choices(self, width):
+        compact = width < 650
+        if getattr(self, "_compact_choices", None) == compact:
+            return
+        self._compact_choices = compact
+        for button in (self.project_action, self.paste_action, self.upload_action):
+            self.choices_layout.removeWidget(button)
+        if compact:
+            self.project_action.setMinimumSize(0, 110)
+            self.project_action.setMaximumHeight(120)
+            self.paste_action.setMinimumHeight(88)
+            self.upload_action.setMinimumHeight(88)
+            self.choices_layout.addWidget(self.project_action, 0, 0)
+            self.choices_layout.addWidget(self.paste_action, 1, 0)
+            self.choices_layout.addWidget(self.upload_action, 2, 0)
+            self.choices_layout.setColumnStretch(0, 1)
+            self.choices_layout.setColumnStretch(1, 0)
+            self.setMinimumHeight(520)
+        else:
+            self.project_action.setMinimumSize(210, 220)
+            self.project_action.setMaximumHeight(16777215)
+            self.paste_action.setMinimumHeight(104)
+            self.upload_action.setMinimumHeight(92)
+            self.choices_layout.addWidget(self.project_action, 0, 0, 2, 1)
+            self.choices_layout.addWidget(self.paste_action, 0, 1)
+            self.choices_layout.addWidget(self.upload_action, 1, 1)
+            self.choices_layout.setColumnStretch(0, 2)
+            self.choices_layout.setColumnStretch(1, 5)
+            self.setMinimumHeight(390)
+        self.choices_layout.invalidate()
+
+    def resizeEvent(self, event):
+        self._reflow_choices(event.size().width())
+        super().resizeEvent(event)
 
     def add_project(self):
         if self.owner.add_project_context():
@@ -810,7 +905,7 @@ class ContextManagerDialog(QDialog):
         self.setWindowTitle("Kontekst")
         self.setModal(True)
         self.resize(1000, 660)
-        self.setMinimumSize(780, 520)
+        self.setMinimumSize(520, 560)
         self.root = QVBoxLayout(self)
         self.root.setContentsMargins(28, 24, 28, 28)
         self.root.setSpacing(20)
@@ -983,11 +1078,42 @@ class ContextManagerDialog(QDialog):
             ))
         project_l.addStretch()
         reference_l.addStretch()
-        self.body_layout.addWidget(projects, 0, 0)
-        self.body_layout.addWidget(references, 0, 1)
-        self.body_layout.setColumnStretch(0, 3)
-        self.body_layout.setColumnStretch(1, 5)
+        self.project_panel = projects
+        self.reference_panel = references
+        self._reflow_panels(self.width())
         localize_widget_tree(self)
+
+    def _reflow_panels(self, width):
+        compact = width < 720
+        if getattr(self, "_compact_panels", None) == compact:
+            return
+        self._compact_panels = compact
+        for panel in (self.project_panel, self.reference_panel):
+            self.body_layout.removeWidget(panel)
+        for index in range(2):
+            self.body_layout.setColumnStretch(index, 0)
+            self.body_layout.setRowStretch(index, 0)
+        if compact:
+            self.project_panel.setMinimumHeight(190)
+            self.reference_panel.setMinimumHeight(250)
+            self.body_layout.addWidget(self.project_panel, 0, 0)
+            self.body_layout.addWidget(self.reference_panel, 1, 0)
+            self.body_layout.setColumnStretch(0, 1)
+            self.body_layout.setRowStretch(0, 2)
+            self.body_layout.setRowStretch(1, 3)
+        else:
+            self.project_panel.setMinimumHeight(0)
+            self.reference_panel.setMinimumHeight(0)
+            self.body_layout.addWidget(self.project_panel, 0, 0)
+            self.body_layout.addWidget(self.reference_panel, 0, 1)
+            self.body_layout.setColumnStretch(0, 3)
+            self.body_layout.setColumnStretch(1, 5)
+        self.body_layout.invalidate()
+
+    def resizeEvent(self, event):
+        if hasattr(self, "project_panel"):
+            self._reflow_panels(event.size().width())
+        super().resizeEvent(event)
 
 
 class CreditDialog(QDialog):
@@ -1943,8 +2069,9 @@ class WorkModeDialog(QDialog):
         self.item = item or {}
         self.color = self.item.get("color", "#7C8CFF")
         self.setWindowTitle(i18n.t("İş modunu redaktə et") if item else i18n.t("Yeni iş modu"))
-        self.setMinimumSize(560, 470)
+        self.setMinimumSize(500, 470)
         layout = QVBoxLayout(self)
+        self.mode_root_layout = layout
         layout.setContentsMargins(22, 22, 22, 22)
         layout.setSpacing(14)
         title = QLabel(self.windowTitle(), objectName="settingsPageTitle")
@@ -1957,6 +2084,7 @@ class WorkModeDialog(QDialog):
         layout.addWidget(hint)
 
         form = QFormLayout()
+        self.mode_form_layout = form
         form.setVerticalSpacing(12)
         self.name = QLineEdit(self.item.get("name", ""))
         self.name.setPlaceholderText(i18n.t("Məsələn: Müştəri hesabatı"))
@@ -2062,6 +2190,18 @@ class HistoryPopup(QWidget):
         scroll.setWidget(self.results_widget)
         panel_l.addWidget(scroll, 1)
         localize_widget_tree(self)
+
+    def resizeEvent(self, event):
+        compact = event.size().width() < 600
+        self.mode_root_layout.setContentsMargins(
+            16 if compact else 22, 16 if compact else 22,
+            16 if compact else 22, 16 if compact else 22,
+        )
+        self.mode_form_layout.setRowWrapPolicy(
+            QFormLayout.RowWrapPolicy.WrapAllRows
+            if compact else QFormLayout.RowWrapPolicy.WrapLongRows
+        )
+        super().resizeEvent(event)
 
     def retranslate(self):
         localize_widget_tree(self)
@@ -2212,7 +2352,7 @@ class DeYazWindow(QMainWindow):
         self._audio_device_syncing = False
         self.setWindowTitle("DeYaz")
         self.setWindowIcon(app_icon())
-        self.setMinimumSize(560, 600)
+        self.setMinimumSize(500, 600)
         self.resize(900, 700)
         self._build_ui()
         self.meeting_partial_render_timer = QTimer(self)
@@ -2651,6 +2791,15 @@ class DeYazWindow(QMainWindow):
             #modelColumn {{ background: {c['surface2']}; border: 1px solid {c['separator']}; border-radius: 16px; }}
             #modelHeading {{ color: {c['text']}; font-size: 12px; font-weight: 800; letter-spacing: .7px; }}
             #modelSubheading {{ color: {c['muted']}; font-size: 11px; padding-bottom: 4px; }}
+            #modelResponsiveTabs::pane {{ background: transparent; border: 0; top: -1px; }}
+            #modelResponsiveTabs QTabBar::tab {{ background: {c['soft']}; color: {c['muted']};
+                border: 2px solid {c['separator']}; border-bottom: 0;
+                border-top-left-radius: 11px; border-top-right-radius: 11px;
+                padding: 9px 13px; min-width: 150px; font-weight: 760; }}
+            #modelResponsiveTabs QTabBar::tab:selected {{ background: {c['surface2']};
+                color: {c['text']}; border-color: {c['accent']}; }}
+            #modelResponsiveTabs QTabBar::tab:hover:!selected {{ background: {c['hover']};
+                color: {c['text']}; }}
             #modelChoices {{ background: transparent; border: 0; padding: 0; }}
             #modelChoices::item {{ background: {c['field']}; color: {c['text']}; border: 1px solid {c['separator']}; border-radius: 11px; padding: 0; margin: 3px 0; }}
             #modelChoices::item:selected {{ background: {c['soft']}; color: {c['text']}; border: 2px solid {c['accent']}; }}
@@ -2858,6 +3007,7 @@ class DeYazWindow(QMainWindow):
 
         top = QFrame(objectName="top")
         top_l = QHBoxLayout(top)
+        self.top_layout = top_l
         top_l.setContentsMargins(24, 12, 22, 12)
         self.home_button = QPushButton("DeYaz", objectName="brandButton")
         self.home_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -2908,6 +3058,7 @@ class DeYazWindow(QMainWindow):
         self.appearance_switch.setFixedSize(42, 42)
         tools = QFrame(objectName="topTools")
         tools_l = QHBoxLayout(tools)
+        self.tools_layout = tools_l
         tools_l.setContentsMargins(4, 4, 4, 4)
         tools_l.setSpacing(8)
         tools_l.addWidget(self.appearance_switch)
@@ -2925,6 +3076,7 @@ class DeYazWindow(QMainWindow):
         shell.setObjectName("shell")
         self.background = shell
         shell_l = QHBoxLayout(shell)
+        self.shell_layout = shell_l
         shell_l.setContentsMargins(26, 32, 26, 38)
         shell_l.addStretch()
         self.content = QWidget()
@@ -2932,6 +3084,7 @@ class DeYazWindow(QMainWindow):
         self.content.setMinimumWidth(0)
         self.content.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         body_l = QVBoxLayout(self.content)
+        self.body_layout = body_l
         body_l.setContentsMargins(0, 0, 0, 0)
         body_l.setSpacing(20)
 
@@ -4639,8 +4792,11 @@ class DeYazWindow(QMainWindow):
         self.meeting_result_type.setStyleSheet(f"""
             QComboBox {{ background-color: {c['blue']}; color: #202321;
                 border: 3px solid #292C2A; border-radius: 18px;
-                padding: 11px 18px; font-family: 'Segoe Print';
+                padding: 11px 48px 11px 18px; font-family: 'Segoe Print';
                 font-size: 17px; font-weight: 700; }}
+            QComboBox::drop-down {{ subcontrol-origin: padding;
+                subcontrol-position: center right; width: 36px;
+                margin: 5px 7px 5px 0; background: transparent; border: 0; }}
             QComboBox:hover, QComboBox:on {{ border-width: 4px; }}
         """)
         self.meeting_action.setStyleSheet(f"""
@@ -4784,7 +4940,7 @@ class DeYazWindow(QMainWindow):
             self.page_header.hide()
         else:
             self.set_main_surface(self.current_surface, force=True)
-        compact = self.width() < 760
+        compact = responsive_content_width(self.width()) < 720
         self.settings_sidebar.setVisible(show_settings and not compact)
         self.settings_mobile_nav.setVisible(show_settings and compact)
         self.settings_button.setToolTip(i18n.t("Bağla") if show_settings else i18n.t("Ayarlar"))
@@ -6820,10 +6976,45 @@ class DeYazWindow(QMainWindow):
             ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
             ctypes.windll.user32.SetForegroundWindow(hwnd)
 
+    def _apply_shell_responsiveness(self, width):
+        density = responsive_density_for_width(width)
+        if getattr(self, "_shell_density", None) == density:
+            return
+        self._shell_density = density
+        if density == "narrow":
+            top_margins, tool_gap = (10, 7, 10, 7), 2
+            shell_margins, body_gap = (12, 16, 12, 24), 14
+            tool_size, tab_size, brand_height, brand_icon = 38, (48, 40), 42, 31
+        elif density == "compact":
+            top_margins, tool_gap = (16, 9, 16, 9), 5
+            shell_margins, body_gap = (18, 24, 18, 30), 17
+            tool_size, tab_size, brand_height, brand_icon = 40, (52, 41), 44, 34
+        else:
+            top_margins, tool_gap = (24, 12, 22, 12), 8
+            shell_margins, body_gap = (26, 32, 26, 38), 20
+            tool_size, tab_size, brand_height, brand_icon = 42, (56, 42), 48, 38
+        self.top_layout.setContentsMargins(*top_margins)
+        self.tools_layout.setContentsMargins(3, 3, 3, 3)
+        self.tools_layout.setSpacing(tool_gap)
+        self.shell_layout.setContentsMargins(*shell_margins)
+        self.body_layout.setSpacing(body_gap)
+        self.home_button.setFixedHeight(brand_height)
+        self.home_button.setIconSize(QSize(brand_icon, brand_icon))
+        for button in (
+            self.appearance_switch, self.language_button,
+            self.history_button, self.settings_button,
+        ):
+            button.setFixedSize(tool_size, tool_size)
+        for button in self.surface_buttons.values():
+            button.setFixedSize(*tab_size)
+        self.content.updateGeometry()
+
     def resizeEvent(self, event):
         width = event.size().width()
+        self._apply_shell_responsiveness(width)
+        content_width = responsive_content_width(width)
         self.eyebrow.hide()
-        compact = width < 760
+        compact = content_width < 720
         self.settings_sidebar.setVisible(not compact)
         self.settings_mobile_nav.setVisible(compact and self.settings_box.isVisible())
         self.settings_detail_layout.setContentsMargins(
@@ -6836,7 +7027,7 @@ class DeYazWindow(QMainWindow):
                 if compact else QFormLayout.RowWrapPolicy.WrapLongRows
             )
         if getattr(self, "_template_minimal", False):
-            self._resize_template_pages(width)
+            self._resize_template_pages(content_width)
             super().resizeEvent(event)
             return
         if getattr(self, "_compact_layout", None) != compact:
@@ -7148,6 +7339,8 @@ class DeYazWindow(QMainWindow):
                 self.meeting_models_panel.setMinimumHeight(380)
                 self.meeting_models_panel.setMaximumHeight(16777215)
                 self.meeting_action.setMinimumHeight(180)
+                self.meeting_control_panel.setMinimumHeight(700)
+                self.meeting_control_panel.setMaximumHeight(16777215)
             else:
                 self.meeting_models_panel.setMinimumHeight(248)
                 self.meeting_models_panel.setMaximumHeight(268)

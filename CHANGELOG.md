@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.4 — Responsive UI and English documentation
+
+- Added a shared responsive content-width system for the shell and primary pages.
+- Improved header, navigation, home, dictation, file, meeting and settings layouts from 500 px to wide desktop sizes.
+- Made context, add-context, model onboarding and custom work-mode dialogs adapt to narrow windows.
+- Fixed narrow Meeting Notes control overlap and contained its dropdown arrow.
+- Rewrote the main README in English with current features, platform notes, setup, privacy and development guidance.
+
 ## 3.0.3 — Context manager redesign
 
 - Replaced native project radio controls with clear, checkable project cards.
