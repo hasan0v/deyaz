@@ -24,9 +24,9 @@ class WindowsInstallerTests(unittest.TestCase):
         installer = (ROOT / "installer" / "DeYaz.iss").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
         version_info = (ROOT / "version_info.txt").read_text(encoding="utf-8")
-        self.assertIn('version = "1.0.7"', spec)
-        self.assertIn('#define MyAppVersion "1.0.7"', installer)
-        self.assertIn("DeYaz-Setup-1.0.7-x64.exe", workflow)
+        self.assertIn('version = "1.0.8"', spec)
+        self.assertIn('#define MyAppVersion "1.0.8"', installer)
+        self.assertIn("DeYaz-Setup-1.0.8-x64.exe", workflow)
         self.assertIn("StringStruct(u'CompanyName', u'Ali Hasanov')", version_info)
 
     def test_installer_uses_deyaz_brand_assets_and_creator_metadata(self):

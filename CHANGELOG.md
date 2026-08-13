@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.8 — Dark media controls and CRT playback
+
+- Made the GitHub and LinkedIn header icons follow the active light or dark theme.
+- Added an animated CRT glass layer with scanlines, phosphor sweep and vignette to video playback.
+- Fixed dark-mode contrast for media time labels, seek progress and skip controls.
+
 ## 1.0.7 — History stability and branded setup
 
 - Fixed the crash triggered by opening the history drawer.

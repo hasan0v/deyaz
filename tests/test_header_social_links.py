@@ -11,13 +11,18 @@ class HeaderSocialLinkTests(unittest.TestCase):
         self.assertIn("by Ali Hasanov", source)
         self.assertIn("https://github.com/hasan0v/deyaz", source)
         self.assertIn("https://www.linkedin.com/in/ali-hasanov", source)
-        self.assertIn('qta.icon("fa6b.github"', source)
-        self.assertIn('qta.icon("fa6b.linkedin-in"', source)
+        self.assertIn('"fa6b.github", color=self.theme_tokens["text"]', source)
+        self.assertIn('"fa6b.linkedin-in", color=self.theme_tokens["text"]', source)
         self.assertIn("self.github_star", source)
 
     def test_creator_credit_hides_only_at_non_roomy_widths(self):
         source = inspect.getsource(DeYazWindow._apply_shell_responsiveness)
         self.assertIn('self.creator_credit.setVisible(density == "roomy")', source)
+
+    def test_social_icons_follow_the_active_theme(self):
+        source = inspect.getsource(DeYazWindow.apply_theme)
+        self.assertIn('qta.icon("fa6b.github", color=colour)', source)
+        self.assertIn('qta.icon("fa6b.linkedin-in", color=colour)', source)
 
     def test_linkedin_call_to_action_is_first_person(self):
         self.assertEqual(

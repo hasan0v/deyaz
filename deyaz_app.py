@@ -154,13 +154,85 @@ def compose_meeting_live_text(finalized, partials):
     return "\n".join(entry[2] for entry in entries)
 
 
+class CrtVideoOverlay(QWidget):
+    """Lightweight CRT glass drawn above video without intercepting input."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("fileVideoOverlay")
+        self.phase = 0.0
+        self.playing = False
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.timer = QTimer(self)
+        self.timer.setInterval(50)
+        self.timer.timeout.connect(self._animate)
+
+    def set_playing(self, playing):
+        self.playing = bool(playing)
+        if self.playing:
+            self.timer.start()
+        else:
+            self.timer.stop()
+        self.update()
+
+    def _animate(self):
+        self.phase = (self.phase + 0.018) % 1.0
+        self.update()
+
+    def paintEvent(self, _event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        bounds = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        if bounds.width() <= 0 or bounds.height() <= 0:
+            return
+
+        # Rounded glass keeps the video inside the television-shaped screen.
+        clip = QPainterPath()
+        clip.addRoundedRect(bounds, 14, 14)
+        painter.setClipPath(clip)
+
+        # Fine phosphor scanlines and a very subtle RGB mask.
+        painter.setPen(QPen(QColor(4, 12, 10, 44), 1))
+        for y in range(2, self.height(), 4):
+            painter.drawLine(0, y, self.width(), y)
+        for x, colour in ((0, QColor(255, 80, 90, 9)),
+                          (1, QColor(80, 255, 170, 8)),
+                          (2, QColor(80, 150, 255, 8))):
+            painter.setPen(QPen(colour, 1))
+            for column in range(x, self.width(), 6):
+                painter.drawLine(column, 0, column, self.height())
+
+        # Moving refresh band is restrained enough to avoid hiding captions.
+        sweep_y = bounds.top() + bounds.height() * self.phase
+        sweep = QLinearGradient(0, sweep_y - 16, 0, sweep_y + 16)
+        sweep.setColorAt(0.0, QColor(145, 255, 205, 0))
+        sweep.setColorAt(0.5, QColor(145, 255, 205, 22 if self.playing else 10))
+        sweep.setColorAt(1.0, QColor(145, 255, 205, 0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(sweep)
+        painter.drawRect(QRectF(0, sweep_y - 16, self.width(), 32))
+
+        # Curved-screen vignette and inner glass highlight.
+        vignette = QRadialGradient(bounds.center(), bounds.width() * 0.68)
+        vignette.setColorAt(0.0, QColor(0, 0, 0, 0))
+        vignette.setColorAt(0.72, QColor(0, 0, 0, 12))
+        vignette.setColorAt(1.0, QColor(0, 0, 0, 112))
+        painter.setBrush(vignette)
+        painter.drawRoundedRect(bounds, 14, 14)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(214, 255, 235, 52), 1.2))
+        painter.drawRoundedRect(bounds.adjusted(2, 2, -2, -2), 12, 12)
+
+
 class SubtitleVideoWidget(QVideoWidget):
-    """Video surface with a caption label that cannot obscure the frame."""
+    """Video surface with CRT glass and captions kept above the effect."""
 
     def __init__(self, parent=None, objectName=""):
         super().__init__(parent)
         if objectName:
             self.setObjectName(objectName)
+        self.crt_overlay = CrtVideoOverlay(self)
         self.subtitle_label = QLabel(self, objectName="fileSubtitle")
         self.subtitle_label.setWordWrap(True)
         self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -171,6 +243,7 @@ class SubtitleVideoWidget(QVideoWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self.crt_overlay.setGeometry(self.rect())
         margin = max(16, min(28, self.width() // 16))
         caption_height = max(54, min(86, self.height() // 3))
         self.subtitle_label.setGeometry(
@@ -179,7 +252,11 @@ class SubtitleVideoWidget(QVideoWidget):
             max(1, self.width() - (margin * 2)),
             caption_height,
         )
+        self.crt_overlay.raise_()
         self.subtitle_label.raise_()
+
+    def set_playing(self, playing):
+        self.crt_overlay.set_playing(playing)
 
 
 class AudioWaveformWidget(QWidget):
@@ -2887,7 +2964,7 @@ class DeYazWindow(QMainWindow):
             #brandIdentity {{ background: transparent; border: 0; }}
             #creatorCredit {{ color: {c['muted']}; font-size: 12px; font-weight: 720;
                               padding: 0 5px 0 1px; }}
-            #socialGithub, #socialLinkedIn {{ color: #202321; border: 2px solid #292C2A;
+            #socialGithub, #socialLinkedIn {{ color: {c['text']}; border: 2px solid {c['separator']};
                 border-radius: 12px; padding: 7px; min-width: 36px; max-width: 36px;
                 min-height: 36px; max-height: 36px; }}
             #socialGithub {{ background: transparent; }}
@@ -3039,6 +3116,8 @@ class DeYazWindow(QMainWindow):
             self.update_appearance_button(self.appearance_preference)
         if hasattr(self, "language_button"):
             colour = self.theme_tokens["text"]
+            self.github_button.setIcon(qta.icon("fa6b.github", color=colour))
+            self.linkedin_button.setIcon(qta.icon("fa6b.linkedin-in", color=colour))
             self.language_button.setIcon(line_icon("globe", colour, 21))
             self.history_button.setIcon(line_icon("history", colour, 21))
             self.settings_button.setIcon(line_icon(
@@ -3060,6 +3139,9 @@ class DeYazWindow(QMainWindow):
                 button = getattr(self, button_name, None)
                 if button is not None:
                     button.setIcon(line_icon(icon_name, colour, 18))
+            if hasattr(self, "file_rewind"):
+                self.file_rewind.setIcon(line_icon("rewind", colour, 22))
+                self.file_forward.setIcon(line_icon("forward", colour, 22))
         if hasattr(self, "record"):
             self.apply_work_mode_visual()
         if hasattr(self, "home_cards"):
@@ -3089,7 +3171,9 @@ class DeYazWindow(QMainWindow):
         brand_l.setSpacing(7)
         self.creator_credit = QLabel("by Ali Hasanov", objectName="creatorCredit")
         self.github_button = QPushButton(objectName="socialGithub")
-        self.github_button.setIcon(qta.icon("fa6b.github", color="#202321"))
+        self.github_button.setIcon(qta.icon(
+            "fa6b.github", color=self.theme_tokens["text"]
+        ))
         self.github_button.setIconSize(QSize(20, 20))
         self.github_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.github_button.setToolTip("GitHub-da ulduz ver")
@@ -3109,7 +3193,9 @@ class DeYazWindow(QMainWindow):
             lambda: QDesktopServices.openUrl(QUrl("https://github.com/hasan0v/deyaz"))
         )
         self.linkedin_button = QPushButton(objectName="socialLinkedIn")
-        self.linkedin_button.setIcon(qta.icon("fa6b.linkedin-in", color="#202321"))
+        self.linkedin_button.setIcon(qta.icon(
+            "fa6b.linkedin-in", color=self.theme_tokens["text"]
+        ))
         self.linkedin_button.setIconSize(QSize(19, 19))
         self.linkedin_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.linkedin_button.setToolTip("LinkedIn-də məni izləyin")
@@ -4672,7 +4758,9 @@ class DeYazWindow(QMainWindow):
         control_row.setSpacing(12)
         control_row.addStretch()
         self.file_rewind = QPushButton(objectName="mediaSkip")
-        self.file_rewind.setIcon(line_icon("rewind", "#202321", 22))
+        self.file_rewind.setIcon(line_icon(
+            "rewind", self.theme_tokens["text"], 22
+        ))
         self.file_rewind.setIconSize(QSize(28, 28))
         self.file_rewind.setFixedSize(48, 42)
         self.file_rewind.setToolTip("10 saniyə geri")
@@ -4684,7 +4772,9 @@ class DeYazWindow(QMainWindow):
         self.file_play.setToolTip("Oynat")
         self.file_play.clicked.connect(self.toggle_file_media)
         self.file_forward = QPushButton(objectName="mediaSkip")
-        self.file_forward.setIcon(line_icon("forward", "#202321", 22))
+        self.file_forward.setIcon(line_icon(
+            "forward", self.theme_tokens["text"], 22
+        ))
         self.file_forward.setIconSize(QSize(28, 28))
         self.file_forward.setFixedSize(48, 42)
         self.file_forward.setToolTip("10 saniyə irəli")
@@ -4936,18 +5026,19 @@ class DeYazWindow(QMainWindow):
                 padding: 9px 14px; font-family: 'Segoe UI'; font-size: 15px;
                 font-weight: 650; }}
             QFrame#fileTransport {{ background-color: {c['surface']};
-                border: 3px solid #292C2A; border-radius: 20px; }}
+                border: 3px solid {c['separator']}; border-radius: 20px; }}
             QPushButton#mediaPlay {{ background-color: {c['pink']}; color: #202321;
                 border: 3px solid #292C2A; border-radius: 28px; padding: 8px; }}
             QPushButton#mediaPlay:hover {{ background-color: #FFADB2; border-width: 4px; }}
-            QPushButton#mediaSkip {{ background-color: {c['surface2']}; color: #202321;
-                border: 2px solid #292C2A; border-radius: 18px; padding: 6px; }}
-            QPushButton#mediaSkip:hover {{ background-color: {c['yellow']}; border-width: 3px; }}
-            QLabel#mediaTime {{ color: #202321; font-family: 'Segoe UI';
+            QPushButton#mediaSkip {{ background-color: {c['surface2']}; color: {c['text']};
+                border: 2px solid {c['separator']}; border-radius: 18px; padding: 6px; }}
+            QPushButton#mediaSkip:hover {{ background-color: {c['yellow']}; color: #202321;
+                border-color: #292C2A; border-width: 3px; }}
+            QLabel#mediaTime {{ color: {c['text']}; font-family: 'Segoe UI';
                 font-size: 11px; font-weight: 700; }}
-            QSlider#mediaSeek::groove:horizontal {{ height: 7px; background: rgba(32,35,33,55);
+            QSlider#mediaSeek::groove:horizontal {{ height: 7px; background: {c['soft']};
                 border-radius: 3px; }}
-            QSlider#mediaSeek::sub-page:horizontal {{ background: #292C2A; border-radius: 3px; }}
+            QSlider#mediaSeek::sub-page:horizontal {{ background: {c['text']}; border-radius: 3px; }}
             QSlider#mediaSeek::handle:horizontal {{ background: {c['pink']};
                 border: 2px solid #292C2A; width: 18px; margin: -7px 0;
                 border-radius: 9px; }}
@@ -6452,6 +6543,9 @@ class DeYazWindow(QMainWindow):
     def file_media_state_changed(self, state):
         playing = state == QMediaPlayer.PlaybackState.PlayingState
         self.file_wave.set_playing(playing)
+        self.file_video.set_playing(
+            playing and getattr(self, "file_media_is_video", False)
+        )
         self.file_play.setIcon(
             line_icon("pause" if playing else "play", "#202321", 26)
         )
