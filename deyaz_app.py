@@ -973,6 +973,10 @@ class ContextManagerDialog(QDialog):
 
     def _panel(self, title, icon_name, object_name):
         panel = QFrame(objectName=object_name)
+        panel.setMinimumWidth(0)
+        panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         panel_l = QVBoxLayout(panel)
         panel_l.setContentsMargins(18, 16, 18, 18)
         panel_l.setSpacing(12)
@@ -1030,6 +1034,10 @@ class ContextManagerDialog(QDialog):
                     objectName="contextProjectChoice",
                 )
                 choice.setCheckable(True)
+                choice.setMinimumWidth(0)
+                choice.setSizePolicy(
+                    QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+                )
                 choice.setChecked(bool(item.get("enabled", False)))
                 choice.setIconSize(QSize(24, 24))
                 self._sync_choice_icon(choice, "folder", choice.isChecked())
@@ -1051,6 +1059,10 @@ class ContextManagerDialog(QDialog):
                 self._choice_copy(label, preview), objectName="contextEntry"
             )
             choice.setCheckable(True)
+            choice.setMinimumWidth(0)
+            choice.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+            )
             choice.setChecked(bool(item.get("enabled", True)))
             icon_name = "file" if item.get("kind") == "file" else "clipboard"
             choice.setIconSize(QSize(24, 24))

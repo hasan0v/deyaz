@@ -3,7 +3,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QSizePolicy, QWidget
 
 from deyaz_app import (
     ContextAddDialog, ContextManagerDialog, ModelOnboardingDialog,
@@ -39,7 +39,17 @@ class ResponsiveMeetingLayoutTests(unittest.TestCase):
         class Owner(QWidget):
             def __init__(self):
                 super().__init__()
-                self.conf = {"context_items": []}
+                self.conf = {"context_items": [
+                    {
+                        "kind": "project", "label": "A very long project name",
+                        "path": "C:/projects/a/very/long/project/path", "enabled": True,
+                    },
+                    {
+                        "kind": "text", "label": "Long meeting notes",
+                        "text": "A long context preview that must not widen its panel",
+                        "enabled": True,
+                    },
+                ]}
 
             def set_context_item_enabled(self, *_args):
                 pass
@@ -59,6 +69,13 @@ class ResponsiveMeetingLayoutTests(unittest.TestCase):
             )[:2],
             (0, 1),
         )
+        for panel in (dialog.project_panel, dialog.reference_panel):
+            self.assertEqual(panel.minimumWidth(), 0)
+        for card in dialog.project_buttons + dialog.reference_buttons:
+            self.assertEqual(card.minimumWidth(), 0)
+            self.assertEqual(
+                card.sizePolicy().horizontalPolicy(), QSizePolicy.Policy.Ignored
+            )
 
     def test_context_add_actions_stack_on_narrow_dialog(self):
         class Owner(QWidget):

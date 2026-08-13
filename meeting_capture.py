@@ -410,10 +410,6 @@ class MeetingCapture(QObject):
 
     def _speaker(self, source):
         mine, theirs = self.conf.speaker_names()
-        if mine == "Me":
-            mine = "Sən"
-        if theirs == "Other side":
-            theirs = "Görüş səsi"
         return mine if source == "mic" else theirs
 
     def _finish(self):

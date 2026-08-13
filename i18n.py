@@ -41,6 +41,8 @@ AZ = {
 # existing interface can be translated in place without coupling widgets to a
 # generated Qt .qm file. Values are ordered as English, Turkish, Russian.
 UI = {
+    "Sən": ("You", "Sen", "Вы"),
+    "Görüş səsi": ("Meeting audio", "Toplantı sesi", "Звук встречи"),
     "DEYAZ WORK MODE": ("DICTATION WORK MODE", "DEYAZ ÇALIŞMA MODU", "РЕЖИМ ДИКТОВКИ"),
     "DeYaz work mode": ("Dictation work mode", "DeYaz çalışma modu", "Режим диктовки"),
     "Danışığın hansı formada hazır mətnə çevriləcəyini seç.": (

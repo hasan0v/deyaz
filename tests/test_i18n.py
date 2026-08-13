@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 import i18n
+from config import Config
 from deyaz_app import (
     ContextAddDialog, ContextManagerDialog, DeYazWindow, FILE_TRANSCRIPTION_CHOICES,
     MEETING_LIVE_TRANSCRIPTION_CHOICES, MEETING_TEXT_CHOICES,
@@ -42,6 +43,20 @@ class LocalizationTests(unittest.TestCase):
             with self.subTest(code=code):
                 i18n.set_language(code)
                 self.assertEqual(i18n.t("Səsini fikrə çevir."), text)
+
+    def test_default_meeting_speaker_names_follow_interface_language(self):
+        expected = {
+            "az": ("Sən", "Görüş səsi"),
+            "en": ("You", "Meeting audio"),
+            "tr": ("Sen", "Toplantı sesi"),
+            "ru": ("Вы", "Звук встречи"),
+        }
+        config = Config.__new__(Config)
+        config.data = {"meeting_self_name": "", "meeting_other_name": ""}
+        for code, names in expected.items():
+            with self.subTest(code=code):
+                i18n.set_language(code)
+                self.assertEqual(config.speaker_names(), names)
 
     def test_runtime_widget_and_tab_retranslation_keeps_source(self):
         root = QWidget()

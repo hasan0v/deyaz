@@ -844,10 +844,8 @@ class Config:
 
     def speaker_names(self):
         """(mine, theirs), falling back to the interface language's defaults."""
-        turkish = i18n.language() == "tr"
-        mine = self["meeting_self_name"].strip() or ("Ben" if turkish else "Me")
-        theirs = self["meeting_other_name"].strip() or (
-            "Karşı taraf" if turkish else "Other side")
+        mine = self["meeting_self_name"].strip() or i18n.t("Sən")
+        theirs = self["meeting_other_name"].strip() or i18n.t("Görüş səsi")
         return mine, theirs
 
 
