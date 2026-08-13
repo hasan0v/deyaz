@@ -30,6 +30,19 @@ MIN_SUBTITLE_SECONDS = 1.5   # how long a cue with no end time of its own stays 
 STAMP_RE = re.compile(r"^\[(?:(\d+):)?(\d{1,2}):(\d{2})\]\s*")
 
 
+def hidden_subprocess_kwargs():
+    """Prevent FFmpeg helpers from flashing a console window on Windows."""
+    if os.name != "nt":
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        "creationflags": subprocess.CREATE_NO_WINDOW,
+        "startupinfo": startupinfo,
+    }
+
+
 class Cancelled(Exception):
     pass
 
@@ -51,6 +64,7 @@ def extract_waveform_peaks(path, count=72):
             "-ac", "1", "-ar", "240", "-f", "s16le", "pipe:1",
         ],
         capture_output=True,
+        **hidden_subprocess_kwargs(),
     )
     if result.returncode != 0 or not result.stdout:
         return []
@@ -192,7 +206,8 @@ class FileTranscriber(QObject):
                 text = self._cleanup(text, timestamps)
 
             if text and (result_type != "transcript" or
-                         output_language != "original"):
+                         output_language != "original" or
+                         summary_focus.strip()):
                 self._check()
                 self.progress.emit("Nəticə seçilmiş formata uyğun hazırlanır…")
                 text = self._transform(
@@ -265,7 +280,8 @@ class FileTranscriber(QObject):
             ),
         }
         focus_rule = (
-            f"\nPay special attention to this user focus: {summary_focus.strip()}"
+            f"\nApply this user focus exactly, without inventing details: "
+            f"{summary_focus.strip()}"
             if summary_focus.strip() else ""
         )
         system_prompt = f"""You process an audio/video transcript.
@@ -390,7 +406,7 @@ def _to_wav(path, workdir):
     res = subprocess.run(
         ["ffmpeg", "-nostdin", "-y", "-i", path, "-vn",
          "-ac", "1", "-ar", str(RATE), "-c:a", "pcm_s16le", out],
-        capture_output=True, text=True,
+        capture_output=True, text=True, **hidden_subprocess_kwargs(),
     )
     if res.returncode != 0 or not os.path.exists(out):
         tail = (res.stderr or "").strip().splitlines()

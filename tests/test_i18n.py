@@ -104,14 +104,16 @@ class LocalizationTests(unittest.TestCase):
         source_path = Path(__file__).resolve().parents[1] / "deyaz_app.py"
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
         sinks = {
-            "QLabel", "QPushButton", "setText", "setWindowTitle", "setToolTip",
+            "QLabel", "QPushButton", "QToolButton", "QCheckBox", "QRadioButton",
+            "setText", "setWindowTitle", "setToolTip",
             "setPlaceholderText", "addAction", "addItem", "addItems",
+            "addRow", "add_settings_page",
             "information", "warning",
             "critical", "question", "getOpenFileName", "getExistingDirectory",
             "setInformativeText",
         }
         non_language_copy = {
-            "", "DeYaz", "OpenRouter", "OpenAI", "₵", "●", "↗", "✕", "00:00",
+            "", "DeYaz", "OpenRouter", "OpenAI", "API", "₵", "●", "↗", "✕", "00:00",
         }
         missing = []
         for node in ast.walk(tree):
@@ -123,7 +125,12 @@ class LocalizationTests(unittest.TestCase):
             )
             if name not in sinks:
                 continue
-            arguments = node.args[:1] if name in {"addItem", "addItems"} else node.args
+            if name in {"addItem", "addItems", "addRow"}:
+                arguments = node.args[:1]
+            elif name == "add_settings_page":
+                arguments = node.args[1:2]
+            else:
+                arguments = node.args
             for argument in arguments:
                 if name == "addItems" and isinstance(argument, (ast.List, ast.Tuple)):
                     values = [
@@ -138,6 +145,20 @@ class LocalizationTests(unittest.TestCase):
                     if value.strip() and value not in non_language_copy and value not in i18n.UI:
                         missing.append(f"line {node.lineno}: {value!r}")
         self.assertEqual(missing, [], "Missing UI translations:\n" + "\n".join(missing))
+
+    def test_reported_settings_and_meeting_labels_translate(self):
+        sources = (
+            "Qısa yol", "Mətn modeli", "Fayl transkripti", "Görüş qeydi",
+            "Görüş xülasəsi", "Tam transkript", "Əsas məqamlar",
+            "Ətraflı icmal", "Tapşırıqlar", "Xüsusi fokus",
+            "Nəticəni təmizlə",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                self.assertIn(source, i18n.UI)
+                self.assertNotEqual(i18n.UI[source][0], "")
+                self.assertNotEqual(i18n.UI[source][1], "")
+                self.assertNotEqual(i18n.UI[source][2], "")
 
     def test_main_context_button_opens_manager_not_add_chooser(self):
         source = inspect.getsource(DeYazWindow._compose_template_pages)

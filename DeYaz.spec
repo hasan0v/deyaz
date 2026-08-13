@@ -3,6 +3,7 @@
 import sys
 
 
+version = "3.0.1"
 is_windows = sys.platform == "win32"
 is_macos = sys.platform == "darwin"
 icon = (
@@ -62,6 +63,8 @@ if is_macos:
         icon=icon,
         bundle_identifier="io.github.hasan0v.deyaz",
         info_plist={
+            "CFBundleShortVersionString": version,
+            "CFBundleVersion": version,
             "NSMicrophoneUsageDescription": "DeYaz danışığı mətnə çevirmək üçün mikrofondan istifadə edir.",
             "NSHighResolutionCapable": True,
         },

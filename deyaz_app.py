@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
     QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QGraphicsDropShadowEffect, QMainWindow, QMenu, QMessageBox,
-    QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QSlider,
+    QPlainTextEdit, QProgressBar, QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider,
     QSpinBox, QStackedWidget, QSystemTrayIcon, QTabWidget,
     QToolButton, QVBoxLayout, QWidget,
 )
@@ -844,22 +844,45 @@ class ContextManagerDialog(QDialog):
             widget = item.widget()
             if widget:
                 widget.deleteLater()
-        sources = QFrame(objectName="contextSources")
-        source_l = QVBoxLayout(sources)
-        source_l.setContentsMargins(0, 0, 0, 0)
-        source_l.setSpacing(14)
-        entries = QFrame(objectName="contextEntries")
-        entry_l = QVBoxLayout(entries)
-        entry_l.setContentsMargins(0, 0, 0, 0)
-        entry_l.setSpacing(14)
-        items = list(self.owner.conf.get("context_items", []) or [])
+        projects = QFrame(objectName="contextSources")
+        project_l = QVBoxLayout(projects)
+        project_l.setContentsMargins(0, 0, 0, 0)
+        project_l.setSpacing(14)
+        project_l.addWidget(QLabel("Proyekt", objectName="contextColumnTitle"))
+        references = QFrame(objectName="contextEntries")
+        reference_l = QVBoxLayout(references)
+        reference_l.setContentsMargins(0, 0, 0, 0)
+        reference_l.setSpacing(14)
+        reference_l.addWidget(QLabel(
+            "Mətn və fayllar", objectName="contextColumnTitle"
+        ))
+        items = (
+            self.owner._context_items()
+            if hasattr(self.owner, "_context_items")
+            else list(self.owner.conf.get("context_items", []) or [])
+        )
+        self.project_group = QButtonGroup(self)
+        self.project_group.setExclusive(True)
+        has_project = False
+        has_reference = False
         for index, item in enumerate(items):
-            source = QPushButton(item.get("label", "Kontekst"), objectName="contextSource")
-            source.setCheckable(True)
-            source.setChecked(index == 0)
-            source_l.addWidget(source)
             preview = (item.get("text") or item.get("path") or "").strip()
-            check = QCheckBox(preview[:210], objectName="contextEntry")
+            label = (item.get("label") or "Kontekst").strip()
+            if item.get("kind") == "project":
+                has_project = True
+                choice = QRadioButton(label, objectName="contextProjectChoice")
+                choice.setChecked(bool(item.get("enabled", False)))
+                choice.setToolTip(preview)
+                choice.toggled.connect(
+                    lambda checked, row=index: checked
+                    and self.owner.set_context_item_enabled(row, True)
+                )
+                self.project_group.addButton(choice)
+                project_l.addWidget(choice)
+                continue
+            has_reference = True
+            copy = label if not preview else f"{label}\n{preview[:170]}"
+            check = QCheckBox(copy, objectName="contextEntry")
             check.setChecked(bool(item.get("enabled", True)))
             check.setToolTip(preview)
             check.stateChanged.connect(
@@ -867,11 +890,19 @@ class ContextManagerDialog(QDialog):
                     row, state == Qt.CheckState.Checked.value
                 )
             )
-            entry_l.addWidget(check)
-        source_l.addStretch()
-        entry_l.addStretch()
-        self.body_layout.addWidget(sources, 0, 0)
-        self.body_layout.addWidget(entries, 0, 1)
+            reference_l.addWidget(check)
+        if not has_project:
+            project_l.addWidget(QLabel(
+                "Proyekt əlavə edilməyib", objectName="contextEmpty"
+            ))
+        if not has_reference:
+            reference_l.addWidget(QLabel(
+                "Mətn və ya fayl əlavə edilməyib", objectName="contextEmpty"
+            ))
+        project_l.addStretch()
+        reference_l.addStretch()
+        self.body_layout.addWidget(projects, 0, 0)
+        self.body_layout.addWidget(references, 0, 1)
         self.body_layout.setColumnStretch(0, 2)
         self.body_layout.setColumnStretch(1, 5)
         localize_widget_tree(self)
@@ -961,7 +992,9 @@ class AudioRecorder(QObject):
             self.started = time.monotonic()
         except Exception as exc:
             self.stream = None
-            self.failed.emit(f"Mikrofon başlatıla bilmədi: {exc}")
+            self.failed.emit(i18n.t(
+                "Mikrofon başlatıla bilmədi: {error}", error=exc
+            ))
 
     def _audio(self, indata, frames, _time, status):
         if status:
@@ -982,7 +1015,9 @@ class AudioRecorder(QObject):
         self.stream = None
         duration = time.monotonic() - self.started
         if duration < 0.3 or not self.samples:
-            self.failed.emit("Yazı çox qısadır — ən azı 0.3 saniyə danış.")
+            self.failed.emit(i18n.t(
+                "Yazı çox qısadır — ən azı 0.3 saniyə danış."
+            ))
             return
         try:
             import numpy as np
@@ -995,7 +1030,9 @@ class AudioRecorder(QObject):
                 wav.writeframes(data.tobytes())
             self.finished.emit(path, duration)
         except Exception as exc:
-            self.failed.emit(f"Səs faylı hazırlana bilmədi: {exc}")
+            self.failed.emit(i18n.t(
+                "Səs faylı hazırlana bilmədi: {error}", error=exc
+            ))
         finally:
             self.samples = []
 
@@ -1257,7 +1294,7 @@ def line_icon(name, color="#667085", size=20):
         "wave": "fa6s.wave-square", "play": "fa6s.play", "pause": "fa6s.pause",
         "rewind": "fa6s.backward", "forward": "fa6s.forward",
         "meeting": "fa6s.people-group", "copy": "fa6s.copy",
-        "back": "fa6s.arrow-left",
+        "back": "fa6s.arrow-left", "trash": "fa6s.trash-can",
     }
     return qta.icon(icon_names.get(name, "fa6s.circle"), color=color)
 
@@ -2481,7 +2518,8 @@ class DeYazWindow(QMainWindow):
                 font-family: 'Segoe Print'; font-size: 31px; font-weight: 760; }}
             #contextManagerTitle {{ font-size: 38px; }}
             #contextProjectAction, #contextPasteAction, #contextFileAction,
-            #contextPlusAction, #contextSource, #contextEntry {{ color: #202321;
+            #contextPlusAction, #contextSource, #contextEntry,
+            #contextProjectChoice {{ color: #202321;
                 border: 3px solid #292C2A; border-radius: 20px;
                 font-family: 'Segoe Print'; font-size: 18px; font-weight: 700; }}
             #contextProjectAction, #contextPlusAction, #contextSource {{ background: {c['pink']}; }}
@@ -2496,6 +2534,12 @@ class DeYazWindow(QMainWindow):
             #contextSource:checked {{ background: {c['yellow']}; border-width: 4px; }}
             #contextEntry {{ padding: 18px; min-height: 58px; }}
             #contextEntry::indicator {{ width: 26px; height: 26px; }}
+            #contextProjectChoice {{ background: {c['pink']}; padding: 18px;
+                min-height: 58px; }}
+            #contextProjectChoice::indicator {{ width: 28px; height: 28px; }}
+            #contextColumnTitle {{ color: #202321; font-size: 18px; font-weight: 800;
+                padding: 0 4px 4px 4px; }}
+            #contextEmpty {{ color: #4E5551; font-size: 14px; padding: 18px 6px; }}
             #contextTextEditor {{ background: {c['surface']}; color: {c['text']};
                 border: 3px solid #292C2A; border-radius: 16px; padding: 14px; }}
             #contextSaveAction {{ background: {c['green']}; color: #202321;
@@ -4030,6 +4074,12 @@ class DeYazWindow(QMainWindow):
         self.copy_recent_button.setText("")
         self.copy_recent_button.setIcon(line_icon("copy", self.theme_tokens["text"], 18))
         self.copy_recent_button.setToolTip("Kopyala")
+        self.clear_recent_button = QPushButton(objectName="topIcon")
+        self.clear_recent_button.setIcon(
+            line_icon("trash", self.theme_tokens["text"], 18)
+        )
+        self.clear_recent_button.setToolTip("Nəticəni təmizlə")
+        self.clear_recent_button.clicked.connect(self.clear_dictation_result)
         self.recent_history_button.setText("")
         self.recent_history_button.setIcon(line_icon("history", self.theme_tokens["text"], 18))
         self.recent_history_button.setToolTip("Tarixçə")
@@ -4089,6 +4139,7 @@ class DeYazWindow(QMainWindow):
         result_head.addWidget(result_title)
         result_head.addStretch()
         result_head.addWidget(self.copy_recent_button)
+        result_head.addWidget(self.clear_recent_button)
         result_head.addWidget(self.recent_history_button)
         result_head_widget = QWidget()
         result_head_widget.setLayout(result_head)
@@ -4239,6 +4290,12 @@ class DeYazWindow(QMainWindow):
         file_result_head = QHBoxLayout()
         file_result_head.addWidget(QLabel("Nəticə", objectName="panelTitle"))
         file_result_head.addStretch()
+        self.file_clear = QPushButton(objectName="topIcon")
+        self.file_clear.setIcon(line_icon("trash", self.theme_tokens["text"], 18))
+        self.file_clear.setToolTip("Nəticəni təmizlə")
+        self.file_clear.clicked.connect(self.clear_file_result)
+        self.file_clear.setEnabled(False)
+        file_result_head.addWidget(self.file_clear)
         file_result_l.addLayout(file_result_head)
         file_result_l.addWidget(self.file_output, 1)
         file_result_l.addWidget(self.file_progress)
@@ -4321,6 +4378,12 @@ class DeYazWindow(QMainWindow):
         meeting_result_head.addWidget(QLabel("Nəticə", objectName="panelTitle"))
         meeting_result_head.addStretch()
         meeting_result_head.addWidget(self.meeting_copy)
+        self.meeting_clear = QPushButton(objectName="topIcon")
+        self.meeting_clear.setIcon(line_icon("trash", self.theme_tokens["text"], 18))
+        self.meeting_clear.setToolTip("Nəticəni təmizlə")
+        self.meeting_clear.clicked.connect(self.clear_meeting_result)
+        self.meeting_clear.setEnabled(False)
+        meeting_result_head.addWidget(self.meeting_clear)
         meeting_result_head.addWidget(self.meeting_open)
         meeting_result_l.addLayout(meeting_result_head)
         meeting_result_line = QFrame(objectName="panelRule")
@@ -4356,12 +4419,16 @@ class DeYazWindow(QMainWindow):
         """Apply per-button colour states; Qt styles dynamic properties inconsistently."""
         c = self.theme_tokens
         card_colours = (c["pink"], c["blue"], c["green"])
+        medium_home = getattr(self, "_home_layout_mode", "wide") == "medium"
+        home_font = 17 if medium_home else 21
+        home_padding = 18 if medium_home else 26
+        home_hover_padding = home_padding - 1
         for card, colour in zip(self.home_cards, card_colours):
             card.setStyleSheet(f"""
                 QToolButton {{ background-color: {colour}; color: #202321;
-                    border: 3px solid #292C2A; border-radius: 28px; padding: 26px;
-                    font-size: 21px; font-weight: 760; }}
-                QToolButton:hover {{ border-width: 4px; padding: 25px; }}
+                    border: 3px solid #292C2A; border-radius: 28px; padding: {home_padding}px;
+                    font-size: {home_font}px; font-weight: 760; }}
+                QToolButton:hover {{ border-width: 4px; padding: {home_hover_padding}px; }}
                 QToolButton:pressed {{ padding-top: 31px; padding-bottom: 21px; }}
                 QToolButton:disabled {{ background-color: {c['soft']}; color: {c['muted']};
                     border: 2px solid {c['muted']}; }}
@@ -5589,7 +5656,19 @@ class DeYazWindow(QMainWindow):
 
     def _context_items(self):
         items = self.conf.get("context_items", []) or []
-        return [dict(item) for item in items if isinstance(item, dict)]
+        normalized = [dict(item) for item in items if isinstance(item, dict)]
+        legacy_path = (self.conf.get("context_project_dir", "") or "").strip()
+        if legacy_path and not any(
+            item.get("kind") == "project" for item in normalized
+        ):
+            normalized.insert(0, {
+                "label": Path(legacy_path).name or "Proyekt",
+                "text": "",
+                "path": legacy_path,
+                "kind": "project",
+                "enabled": True,
+            })
+        return normalized
 
     def _save_context_items(self, items):
         self.conf["context_items"] = items
@@ -5624,10 +5703,13 @@ class DeYazWindow(QMainWindow):
         self.conf["context_project_dir"] = selected
         if hasattr(self, "context_dir"):
             self.context_dir.setText(selected)
-        items = [
-            item for item in self._context_items()
-            if item.get("kind") != "project" or item.get("path") != selected
-        ]
+        items = []
+        for item in self._context_items():
+            if item.get("kind") == "project":
+                if item.get("path") == selected:
+                    continue
+                item["enabled"] = False
+            items.append(item)
         items.insert(0, {
             "label": Path(selected).name or "Proyekt",
             "text": "",
@@ -5662,8 +5744,22 @@ class DeYazWindow(QMainWindow):
     def set_context_item_enabled(self, index, enabled):
         items = self._context_items()
         if 0 <= index < len(items):
-            items[index]["enabled"] = bool(enabled)
+            if items[index].get("kind") == "project" and enabled:
+                for row, item in enumerate(items):
+                    if item.get("kind") == "project":
+                        item["enabled"] = row == index
+                self.conf["context_project_dir"] = items[index].get("path", "")
+                if hasattr(self, "context_dir"):
+                    self.context_dir.setText(self.conf["context_project_dir"])
+            else:
+                items[index]["enabled"] = bool(enabled)
             self._save_context_items(items)
+
+    def selected_project_context_path(self):
+        for item in self._context_items():
+            if item.get("kind") == "project" and item.get("enabled", False):
+                return (item.get("path") or "").strip()
+        return ""
 
     def manual_context_text(self):
         chunks = []
@@ -5787,7 +5883,7 @@ class DeYazWindow(QMainWindow):
         self.file_save_srt.setEnabled(
             transcript and bool(getattr(self, "file_segments", []))
         )
-        self.file_summary_focus.setEnabled(not transcript)
+        self.file_summary_focus.setEnabled(True)
 
     def start_file_transcription(self):
         if not self.file_model_credentials_ready():
@@ -5885,6 +5981,7 @@ class DeYazWindow(QMainWindow):
 
     def on_file_finished(self, text, segments):
         self.file_output.setPlainText(text)
+        self.file_clear.setEnabled(bool(text.strip()))
         self.file_segments = segments
         self.file_wave.set_cues(segments)
         self.file_media_position_changed(self.file_player.position())
@@ -5938,6 +6035,17 @@ class DeYazWindow(QMainWindow):
         if text:
             self.app.clipboard().setText(text)
             self.file_status.setText(i18n.t("Nəticə clipboard-a köçürüldü."))
+
+    def clear_file_result(self):
+        self.file_output.clear()
+        self.file_segments = []
+        self.file_save_srt.setEnabled(False)
+        if hasattr(self, "file_wave"):
+            self.file_wave.set_cues([])
+        if hasattr(self, "file_subtitle"):
+            self.file_subtitle.clear()
+        self.file_status.setText(i18n.t("Nəticə təmizləndi"))
+        self.file_clear.setEnabled(False)
 
     def save_file_output(self):
         self.write_file_result(
@@ -6287,6 +6395,8 @@ class DeYazWindow(QMainWindow):
         result_text = transcript if result_type == "transcript" else notes
         if hasattr(self, "meeting_result_output"):
             self.meeting_result_output.setPlainText(result_text)
+        self.meeting_copy.setEnabled(bool(result_text.strip()))
+        self.meeting_clear.setEnabled(bool(result_text.strip()))
         self.latest_result_text = result_text
         self.recent_time.setText(time.strftime("%H:%M"))
         self.recent_preview.setText(result_text.replace("\n", " ")[:360])
@@ -6328,6 +6438,12 @@ class DeYazWindow(QMainWindow):
             QTimer.singleShot(
                 1300, lambda: self.meeting_copy.setText(i18n.t("Mətni kopyala"))
             )
+
+    def clear_meeting_result(self):
+        self.meeting_result_output.clear()
+        self.meeting_copy.setEnabled(False)
+        self.meeting_clear.setEnabled(False)
+        self.meeting_state.setText(i18n.t("Nəticə təmizləndi"))
 
     def open_last_meeting(self):
         if self.last_meeting_path and Path(self.last_meeting_path).exists():
@@ -6399,7 +6515,7 @@ class DeYazWindow(QMainWindow):
             self.context_value.setText(i18n.t("Sönülü"))
             self.bubble.set_context("")
             return None
-        snapshot = capture_context(self.conf["context_project_dir"])
+        snapshot = capture_context(self.selected_project_context_path())
         if manual:
             combined = "\n\n".join(
                 part for part in (snapshot.text.strip(), "USER SELECTED CONTEXT\n" + manual)
@@ -6483,6 +6599,15 @@ class DeYazWindow(QMainWindow):
         if self.history_popup.isVisible():
             self.history_popup.refresh(cfg.read_history(5))
 
+    def clear_dictation_result(self):
+        self.latest_result_text = ""
+        self.recent_preview.clear()
+        self.recent_time.clear()
+        if hasattr(self, "dictation_result_output"):
+            self.dictation_result_output.clear()
+        self.copy_recent_button.setEnabled(False)
+        self._update_dictation_result_layout()
+
     def paste(self):
         if os.name == "nt":
             user32 = ctypes.windll.user32
@@ -6499,7 +6624,9 @@ class DeYazWindow(QMainWindow):
                 keyboard.press("v")
                 keyboard.release("v")
         except Exception as exc:
-            self.detail.setText(i18n.t(f"Avtomatik yapışdırma alınmadı: {exc}"))
+            self.detail.setText(i18n.t(
+                "Avtomatik yapışdırma alınmadı: {error}", error=exc
+            ))
 
     def fail(self, message):
         self.bubble.set_state("error", message)
@@ -6531,12 +6658,12 @@ class DeYazWindow(QMainWindow):
             return
         text = "\n\n".join(f"{row.get('ts', '')}  ·  {row.get('text', '')[:180]}" for row in reversed(rows))
         self.history.setText(text)
-        latest = rows[-1]
-        self.latest_result_text = latest.get("text", "").strip()
-        preview = self.latest_result_text.replace("\n", " ").strip()
-        self.recent_preview.setText(preview[:360])
-        self.recent_time.setText(latest.get("ts", ""))
-        self.copy_recent_button.setEnabled(bool(self.latest_result_text))
+        # History persists, but the Result panel is session-only and must not
+        # be refilled from disk when DeYaz starts again.
+        if self.latest_result_text:
+            preview = self.latest_result_text.replace("\n", " ").strip()
+            self.recent_preview.setText(preview[:360])
+            self.copy_recent_button.setEnabled(True)
         if hasattr(self, "dictation_workspace"):
             self._update_dictation_result_layout()
 
@@ -6721,8 +6848,8 @@ class DeYazWindow(QMainWindow):
         super().resizeEvent(event)
 
     def _resize_template_pages(self, width):
-        home_layout_mode = "stack" if width < 760 else (
-            "medium" if width < 1100 else "wide"
+        home_layout_mode = "stack" if width < 900 else (
+            "medium" if width < 1200 else "wide"
         )
         if getattr(self, "_home_layout_mode", None) != home_layout_mode:
             self._home_layout_mode = home_layout_mode
@@ -6730,9 +6857,10 @@ class DeYazWindow(QMainWindow):
                 self.home_layout.removeWidget(card)
             if home_layout_mode == "stack":
                 self.home_layout.setHorizontalSpacing(16)
+                card_width = max(240, min(620, width - 100))
                 for row, card in enumerate(self.home_cards):
-                    card.setMinimumSize(240, 210)
-                    card.setMaximumSize(520, 210)
+                    card.setMinimumSize(card_width, 210)
+                    card.setMaximumSize(card_width, 210)
                     card.setIconSize(QSize(82, 82))
                     self.home_layout.addWidget(
                         card, row, 0, alignment=Qt.AlignmentFlag.AlignCenter
@@ -6748,6 +6876,7 @@ class DeYazWindow(QMainWindow):
                         card, 0, column, alignment=Qt.AlignmentFlag.AlignCenter
                     )
                     self.home_layout.setColumnStretch(column, 1)
+            self.refresh_page_chrome()
 
         dictation_compact = width < 790
         dictation_has_result = bool(self.latest_result_text.strip())

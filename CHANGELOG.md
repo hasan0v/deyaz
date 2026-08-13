@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.1 — Localization and context fixes
+
+- File transcription custom focus is always editable and is applied when supplied.
+- Settings, file and meeting labels are fully localized in AZ, EN, TR and RU.
+- Context selection now allows one project via radio buttons and multiple text/file references via checkboxes.
+- Result panels have clear actions; the dictation result starts empty after every app restart while history remains available.
+- Windows FFmpeg helpers run without flashing a terminal window.
+- Narrow-window home cards no longer crop localized labels.
+
 ## 3.0.0 — DeYaz
 
 - Tətbiq və paketlər `Dikte`-dən `DeYaz`-a rebrand edildi.

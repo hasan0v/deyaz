@@ -1,4 +1,6 @@
 import unittest
+import os
+import subprocess
 from unittest.mock import patch
 
 import filetranscribe
@@ -6,6 +8,16 @@ import api
 
 
 class WaveformTests(unittest.TestCase):
+    def test_ffmpeg_helpers_are_hidden_on_windows(self):
+        kwargs = filetranscribe.hidden_subprocess_kwargs()
+        if os.name == "nt":
+            self.assertEqual(kwargs["creationflags"], subprocess.CREATE_NO_WINDOW)
+            self.assertTrue(
+                kwargs["startupinfo"].dwFlags & subprocess.STARTF_USESHOWWINDOW
+            )
+        else:
+            self.assertEqual(kwargs, {})
+
     def test_gpt_transcribe_has_music_vocal_fallback(self):
         target = api.Target(
             "openai", "OpenAI", "key", "https://api.openai.com/v1",
