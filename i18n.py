@@ -41,6 +41,15 @@ AZ = {
 # existing interface can be translated in place without coupling widgets to a
 # generated Qt .qm file. Values are ordered as English, Turkish, Russian.
 UI = {
+    "by Ali Hasanov": ("by Ali Hasanov", "Ali Hasanov tarafından", "автор: Ali Hasanov"),
+    "GitHub-da ulduz ver": (
+        "Star DeYaz on GitHub", "DeYaz'a GitHub'da yıldız ver",
+        "Поставить DeYaz звезду на GitHub",
+    ),
+    "LinkedIn-də Ali Hasanov-u izləyin": (
+        "Follow Ali Hasanov on LinkedIn", "Ali Hasanov'u LinkedIn'de takip et",
+        "Подписаться на Ali Hasanov в LinkedIn",
+    ),
     "Sən": ("You", "Sen", "Вы"),
     "Görüş səsi": ("Meeting audio", "Toplantı sesi", "Звук встречи"),
     "DEYAZ WORK MODE": ("DICTATION WORK MODE", "DEYAZ ÇALIŞMA MODU", "РЕЖИМ ДИКТОВКИ"),

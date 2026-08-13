@@ -2848,6 +2848,17 @@ class DeYazWindow(QMainWindow):
             #brandButton {{ background: transparent; border: 0; padding: 4px 8px 4px 2px;
                             font-size: 20px; font-weight: 780; text-align: left; }}
             #brandButton:hover {{ background: {c['hover']}; border: 0; }}
+            #brandIdentity {{ background: transparent; border: 0; }}
+            #creatorCredit {{ color: {c['muted']}; font-size: 12px; font-weight: 720;
+                              padding: 0 5px 0 1px; }}
+            #socialGithub, #socialLinkedIn {{ color: #202321; border: 2px solid #292C2A;
+                border-radius: 12px; padding: 7px; min-width: 36px; max-width: 36px;
+                min-height: 36px; max-height: 36px; }}
+            #socialGithub {{ background: {c['yellow']}; }}
+            #socialLinkedIn {{ background: {c['blue']}; }}
+            #socialGithub:hover, #socialLinkedIn:hover {{ border-width: 3px; padding: 6px; }}
+            #socialGithub:pressed, #socialLinkedIn:pressed {{ padding-top: 9px; padding-bottom: 5px; }}
+            #socialGithub:focus, #socialLinkedIn:focus {{ border: 3px solid {c['accent']}; padding: 6px; }}
             #topTools {{ background: transparent; border: 0; }}
             #topIcon, #appearanceSwitch {{ background: {c['surface']}; border: 2px solid {c['separator']};
                                            border-radius: 13px; padding: 8px; min-width: 40px; }}
@@ -3027,6 +3038,64 @@ class DeYazWindow(QMainWindow):
         self.home_button.setIconSize(QSize(38, 38))
         self.home_button.setFixedHeight(48)
         self.home_button.clicked.connect(lambda: self.set_main_surface("home"))
+        self.brand_identity = QFrame(objectName="brandIdentity")
+        brand_l = QHBoxLayout(self.brand_identity)
+        self.brand_layout = brand_l
+        brand_l.setContentsMargins(0, 0, 0, 0)
+        brand_l.setSpacing(7)
+        self.creator_credit = QLabel("by Ali Hasanov", objectName="creatorCredit")
+        self.github_button = QPushButton(objectName="socialGithub")
+        self.github_button.setIcon(qta.icon("fa6b.github", color="#202321"))
+        self.github_button.setIconSize(QSize(20, 20))
+        self.github_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.github_button.setToolTip("GitHub-da ulduz ver")
+        self.github_button.setAccessibleName("GitHub-da ulduz ver")
+        self.github_star = QLabel(parent=self.github_button)
+        self.github_star.setText(chr(0x2605))
+        self.github_star.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.github_star.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+        )
+        self.github_star.setFixedSize(14, 14)
+        self.github_star.setStyleSheet(
+            "background: #FFF4B5; color: #202321; border: 1px solid #292C2A; "
+            "border-radius: 7px; font-family: 'Segoe UI'; font-size: 9px; font-weight: 900;"
+        )
+        self.github_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl("https://github.com/hasan0v/deyaz"))
+        )
+        self.linkedin_button = QPushButton(objectName="socialLinkedIn")
+        self.linkedin_button.setIcon(qta.icon("fa6b.linkedin-in", color="#202321"))
+        self.linkedin_button.setIconSize(QSize(19, 19))
+        self.linkedin_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.linkedin_button.setToolTip("LinkedIn-də Ali Hasanov-u izləyin")
+        self.linkedin_button.setAccessibleName("LinkedIn-də Ali Hasanov-u izləyin")
+        self.linkedin_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl("https://www.linkedin.com/in/ali-hasanov"))
+        )
+        brand_l.addWidget(self.home_button)
+        brand_l.addWidget(self.creator_credit)
+        brand_l.addWidget(self.github_button)
+        brand_l.addWidget(self.linkedin_button)
+        self.social_animations = []
+        for button, glow in (
+            (self.github_button, QColor(255, 199, 35, 150)),
+            (self.linkedin_button, QColor(55, 160, 230, 135)),
+        ):
+            effect = QGraphicsDropShadowEffect(button)
+            effect.setOffset(0, 0)
+            effect.setBlurRadius(10)
+            effect.setColor(glow)
+            button.setGraphicsEffect(effect)
+            animation = QPropertyAnimation(effect, b"blurRadius", button)
+            animation.setDuration(1800 if button is self.github_button else 2400)
+            animation.setKeyValueAt(0.0, 9.0)
+            animation.setKeyValueAt(0.5, 23.0 if button is self.github_button else 17.0)
+            animation.setKeyValueAt(1.0, 9.0)
+            animation.setEasingCurve(QEasingCurve.Type.InOutSine)
+            animation.setLoopCount(-1)
+            animation.start()
+            self.social_animations.append(animation)
         self.eyebrow = QLabel("", objectName="eyebrow")
         self.eyebrow.hide()
 
@@ -3065,7 +3134,7 @@ class DeYazWindow(QMainWindow):
         self.settings_button.setFixedSize(42, 42)
         self.settings_button.setToolTip("Ayarlar")
         self.settings_button.clicked.connect(self.toggle_settings)
-        top_l.addWidget(self.home_button)
+        top_l.addWidget(self.brand_identity)
         top_l.addStretch()
         self.appearance_switch.setFixedSize(42, 42)
         tools = QFrame(objectName="topTools")
@@ -4358,11 +4427,6 @@ class DeYazWindow(QMainWindow):
         dictation_audio_l = QHBoxLayout(self.dictation_audio_bar)
         dictation_audio_l.setContentsMargins(14, 9, 12, 9)
         dictation_audio_l.setSpacing(10)
-        dictation_audio_icon = QLabel(objectName="audioDeviceIcon")
-        dictation_audio_icon.setPixmap(
-            line_icon("mic", "#202321", 17).pixmap(22, 22)
-        )
-        dictation_audio_icon.setFixedSize(26, 26)
         self.dictation_microphone = QComboBox(objectName="audioDevicePicker")
         self.dictation_microphone.setMinimumWidth(0)
         self.dictation_microphone.setSizePolicy(
@@ -4372,7 +4436,6 @@ class DeYazWindow(QMainWindow):
         self.dictation_microphone.currentIndexChanged.connect(
             self.dictation_microphone_changed
         )
-        dictation_audio_l.addWidget(dictation_audio_icon)
         dictation_audio_l.addWidget(self.dictation_microphone, 1)
 
         self.dictation_page = QWidget()
@@ -4384,14 +4447,23 @@ class DeYazWindow(QMainWindow):
         # Keep a small effect gutter around the 420 px cards. Without it,
         # QGraphicsDropShadowEffect is clipped by the fixed-width parent and
         # makes the right border look cut off.
-        self.dictation_left.setMinimumWidth(444)
-        self.dictation_left.setMaximumWidth(444)
+        self.dictation_left.setMinimumWidth(468)
+        self.dictation_left.setMaximumWidth(468)
         dictation_left_l = QVBoxLayout(self.dictation_left)
-        dictation_left_l.setContentsMargins(12, 0, 12, 8)
+        dictation_left_l.setContentsMargins(24, 0, 24, 18)
         dictation_left_l.setSpacing(14)
         dictation_left_l.addWidget(self.dictation_mode_bar)
         dictation_left_l.addWidget(self.dictation_audio_bar)
         dictation_left_l.addWidget(self.hero_card, 1)
+        # Reuse the card's existing effect for RecordButton's pulse animation.
+        # This avoids stacking two effects and keeps the glow inside the real
+        # gutter instead of clipping it at the button's fixed right edge.
+        self.record.shadow_animation.stop()
+        self.record.setGraphicsEffect(None)
+        self.record.shadow = self.hero_shadow
+        self.record.shadow.setOffset(0, 9)
+        self.record.shadow.setBlurRadius(24)
+        self.record.shadow_animation.setTargetObject(self.hero_shadow)
         self.dictation_action_bar.layout().setContentsMargins(0, 0, 0, 0)
         self.dictation_action_bar.hide()
         dictation_left_l.addWidget(self.context_button)
@@ -6996,15 +7068,15 @@ class DeYazWindow(QMainWindow):
         if density == "narrow":
             top_margins, tool_gap = (10, 7, 10, 7), 2
             shell_margins, body_gap = (12, 16, 12, 24), 14
-            tool_size, tab_size, brand_height, brand_icon = 38, (48, 40), 42, 31
+            tool_size, tab_size, brand_height, brand_icon, social_size = 38, (48, 40), 42, 31, 34
         elif density == "compact":
             top_margins, tool_gap = (16, 9, 16, 9), 5
             shell_margins, body_gap = (18, 24, 18, 30), 17
-            tool_size, tab_size, brand_height, brand_icon = 40, (52, 41), 44, 34
+            tool_size, tab_size, brand_height, brand_icon, social_size = 40, (52, 41), 44, 34, 36
         else:
             top_margins, tool_gap = (24, 12, 22, 12), 8
             shell_margins, body_gap = (26, 32, 26, 38), 20
-            tool_size, tab_size, brand_height, brand_icon = 42, (56, 42), 48, 38
+            tool_size, tab_size, brand_height, brand_icon, social_size = 42, (56, 42), 48, 38, 38
         self.top_layout.setContentsMargins(*top_margins)
         self.tools_layout.setContentsMargins(3, 3, 3, 3)
         self.tools_layout.setSpacing(tool_gap)
@@ -7012,6 +7084,13 @@ class DeYazWindow(QMainWindow):
         self.body_layout.setSpacing(body_gap)
         self.home_button.setFixedHeight(brand_height)
         self.home_button.setIconSize(QSize(brand_icon, brand_icon))
+        self.creator_credit.setVisible(density == "roomy")
+        for button in (self.github_button, self.linkedin_button):
+            button.setFixedSize(social_size, social_size)
+            icon_size = 20 if density == "roomy" else 18
+            button.setIconSize(QSize(icon_size, icon_size))
+        self.github_star.move(social_size - 15, 1)
+        self.github_star.raise_()
         for button in (
             self.appearance_switch, self.language_button,
             self.history_button, self.settings_button,

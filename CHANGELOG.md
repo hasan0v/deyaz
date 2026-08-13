@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1 — Creator links and dictation polish
+
+- Added responsive GitHub and LinkedIn creator actions beside the DeYaz wordmark.
+- Added a restrained glow animation that highlights repository starring without disrupting the header.
+- Removed the duplicate microphone icon from the dictation device selector.
+- Moved the recorder glow to the full card and expanded its gutter so the right edge remains visible.
+
 ## 1.0.0 — First stable DeYaz release
 
 - Localized default Meeting Notes speaker labels in AZ, EN, TR and RU.
