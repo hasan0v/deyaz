@@ -13,6 +13,10 @@ DeYaz turns microphone input, audio/video files, and meetings into useful text.
 It is built with PyQt6, keeps each workflow independent, and provides a localized
 interface in Azerbaijani, English, Turkish, and Russian.
 
+<p align="center">
+  <img src="docs/screenshots/deyaz-home-light.png" width="1100" alt="DeYaz home screen showing Dictation, File transcription, and Meeting notes">
+</p>
+
 ## Features
 
 ### Dictation
