@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.12 — Diagnostics and transcript recovery
+
+- Stores bounded technical logs under the DeYaz local data folder without keys or transcript text.
+- Checkpoints raw long-file transcripts before cleanup, translation or summarization.
+- Returns the preserved raw transcript when optional post-processing fails.
+- Normalizes OpenRouter-style model namespaces before direct OpenAI text requests.
+
 ## 1.0.11 — Silent-tail recovery
 
 - Retries an empty transcription response per chunk without changing the selected model.

@@ -553,6 +553,11 @@ _CLEANUP_MODEL_MIGRATION = {
 }
 
 
+def _openai_model_id(model):
+    """OpenAI direct endpoints use bare IDs, unlike OpenRouter's catalog."""
+    return str(model or "").strip().removeprefix("openai/")
+
+
 class Config:
     def __init__(self):
         self.data = dict(DEFAULTS)
@@ -601,6 +606,7 @@ class Config:
             or self.data["file_transcribe_model"] != previous_file_transcribe
         )
         previous_cleanup_model = self.data["cleanup_model"]
+        previous_openai_cleanup_model = self.data["openai_cleanup_model"]
         self.data["cleanup_model"] = _CLEANUP_MODEL_MIGRATION.get(
             previous_cleanup_model, previous_cleanup_model
         )
@@ -610,11 +616,17 @@ class Config:
         self.data["openai_cleanup_model"] = _CLEANUP_MODEL_MIGRATION.get(
             self.data["openai_cleanup_model"], self.data["openai_cleanup_model"]
         )
+        self.data["openai_cleanup_model"] = _openai_model_id(
+            self.data["openai_cleanup_model"]
+        )
         if (self.data["openrouter_cleanup_model"]
                 == DEFAULTS["openrouter_cleanup_model"]
                 and self.data["cleanup_provider"] == "openrouter"):
             self.data["openrouter_cleanup_model"] = self.data["cleanup_model"]
-        cleanup_was_migrated = self.data["cleanup_model"] != previous_cleanup_model
+        cleanup_was_migrated = (
+            self.data["cleanup_model"] != previous_cleanup_model
+            or self.data["openai_cleanup_model"] != previous_openai_cleanup_model
+        )
         auto_language_was_migrated = not bool(
             self.data.get("auto_language_default_v2", False)
         )
@@ -711,7 +723,7 @@ class Config:
         if self["cleanup_provider"] == "openai":
             return api.Target(
                 "openai", "OpenAI", self.openai_key(),
-                self["openai_base_url"], self["openai_cleanup_model"],
+                self["openai_base_url"], _openai_model_id(self["openai_cleanup_model"]),
             )
         return api.Target(
             "openrouter", "OpenRouter", self.openrouter_key(),

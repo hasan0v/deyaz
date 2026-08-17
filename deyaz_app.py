@@ -48,6 +48,7 @@ from audio_devices import (
 )
 import config as cfg
 import credential_store
+import diagnostics
 import filetranscribe
 import i18n
 import openrouter_oauth
@@ -6692,21 +6693,26 @@ class DeYazWindow(QMainWindow):
             self.file_idle()
             self.bubble.set_state("idle")
 
-    def on_file_finished(self, text, segments):
+    def on_file_finished(self, text, segments, warning=""):
         self.file_output.setPlainText(text)
         self.file_clear.setEnabled(bool(text.strip()))
         self.file_segments = segments
         self.file_wave.set_cues(segments)
         self.file_media_position_changed(self.file_player.position())
         self.app.clipboard().setText(text)
-        self.file_status.setText(
-            i18n.t(
-                "Hazırdır  •  {count} simvol  •  clipboard-a köçürüldü",
-                count=f"{len(text):,}",
+        if warning:
+            self.file_status.setText(warning)
+            self.status.setText(i18n.t("Xam transkript qorundu; son emal alınmadı"))
+            self.bubble.set_state("error", warning)
+        else:
+            self.file_status.setText(
+                i18n.t(
+                    "Hazırdır  •  {count} simvol  •  clipboard-a köçürüldü",
+                    count=f"{len(text):,}",
+                )
             )
-        )
-        self.status.setText(i18n.t("Fayl transkripsiyası hazırdır"))
-        self.bubble.set_state("success")
+            self.status.setText(i18n.t("Fayl transkripsiyası hazırdır"))
+            self.bubble.set_state("success")
         self.file_save_srt.setEnabled(
             bool(segments) and self.file_result_type.currentData() == "transcript"
         )
@@ -7837,6 +7843,13 @@ class DeYazWindow(QMainWindow):
 
 
 def main():
+    log_path = diagnostics.setup_logging()
+    diagnostics.install_exception_hook()
+    import logging
+    logging.getLogger("deyaz.app").info(
+        "application_start version=1.0.12 platform=%s log=%s",
+        sys.platform, log_path,
+    )
     # Set this before QApplication so Windows groups the process under DeYaz and
     # uses DeYaz's icon instead of pythonw.exe's default icon.
     if os.name == "nt":

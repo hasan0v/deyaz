@@ -1,6 +1,8 @@
 import unittest
 import os
 import subprocess
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import filetranscribe
@@ -81,6 +83,40 @@ class WaveformTests(unittest.TestCase):
         )
         self.assertEqual(result, [])
         self.assertEqual(transcribe.call_count, 3)
+
+    def test_recovery_checkpoint_keeps_latest_and_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("filetranscribe._recovery_root", return_value=Path(directory)):
+                saved = filetranscribe.save_recovery_transcript("raw transcript", "job1")
+            self.assertEqual(Path(saved).read_text(encoding="utf-8"), "raw transcript")
+            self.assertEqual(
+                (Path(directory) / "latest-transcript.txt").read_text(encoding="utf-8"),
+                "raw transcript",
+            )
+
+    @patch("filetranscribe.save_recovery_transcript", return_value="recovery.txt")
+    @patch("filetranscribe.split_wav", return_value=[("chunk.wav", 0)])
+    @patch("filetranscribe._to_wav", return_value="prepared.wav")
+    @patch("filetranscribe.shutil.which", return_value="ffmpeg")
+    def test_postprocess_error_returns_raw_transcript(
+            self, _which, _to_wav, _split, _save):
+        class FakeConfig(dict):
+            def file_transcribe_target(self):
+                return api.Target("openai", "OpenAI", "key", "url", "gpt-transcribe")
+
+        conf = FakeConfig(language="az", transcribe_prompt="")
+        worker = filetranscribe.FileTranscriber(conf)
+        worker._transcribe_chunk = lambda *args, **kwargs: "raw transcript"
+        worker._cleanup = lambda *args, **kwargs: (_ for _ in ()).throw(
+            api.ApiError("invalid model ID", 400)
+        )
+        completed = []
+        worker.finished.connect(lambda text, segments, warning: completed.append(
+            (text, segments, warning)
+        ))
+        worker._work("recording.wav", False, True)
+        self.assertEqual(completed[0][0], "raw transcript")
+        self.assertIn("invalid model ID", completed[0][2])
 
     @patch("filetranscribe.subprocess.run")
     def test_extracts_normalized_real_audio_peaks(self, run):

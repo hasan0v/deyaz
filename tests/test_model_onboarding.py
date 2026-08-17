@@ -85,6 +85,15 @@ class ModelOnboardingTests(unittest.TestCase):
         self.assertEqual(target.provider, "openai")
         self.assertEqual(target.model, "gpt-transcribe")
 
+    def test_openai_cleanup_target_removes_openrouter_namespace(self):
+        conf = cfg.Config.__new__(cfg.Config)
+        conf.data = dict(cfg.DEFAULTS)
+        conf.data["cleanup_provider"] = "openai"
+        conf.data["openai_cleanup_model"] = "openai/gpt-5.6-luna"
+        target = conf.cleanup_target()
+        self.assertEqual(target.provider, "openai")
+        self.assertEqual(target.model, "gpt-5.6-luna")
+
 
 if __name__ == "__main__":
     unittest.main()

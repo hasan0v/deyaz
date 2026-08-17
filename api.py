@@ -8,18 +8,22 @@ OpenRouter.
 
 import collections
 import json
+import logging
 import mimetypes
 import os
 import re
 import secrets
+import time
 import urllib.error
 import urllib.request
 import wave
 
 from i18n import t
 
+logger = logging.getLogger("deyaz.api")
+
 APP_URL = "https://github.com/hasan0v/deyaz"
-USER_AGENT = f"deyaz/1.0.11 (+{APP_URL})"
+USER_AGENT = f"deyaz/1.0.12 (+{APP_URL})"
 OPENAI_URL = "https://api.openai.com/v1"
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
@@ -141,12 +145,30 @@ def _transcribe_request(target, wav_path, language, prompt, response_format,
     if granularity:
         fields.append(("timestamp_granularities[]", granularity))
     body, ctype = _multipart(fields, "file", wav_path)
+    started = time.monotonic()
+    file_bytes = os.path.getsize(wav_path) if os.path.exists(wav_path) else -1
+    logger.info(
+        "transcription_request provider=%s model=%s format=%s bytes=%s language=%s",
+        target.provider, target.model, response_format, file_bytes,
+        language or "auto",
+    )
     try:
-        return _request(
+        result = _request(
             f"{target.base_url.rstrip('/')}/audio/transcriptions", body,
             _headers(target.provider, target.api_key, ctype), timeout=timeout,
         )
+        logger.info(
+            "transcription_response provider=%s model=%s format=%s elapsed_ms=%d has_text=%s",
+            target.provider, target.model, response_format,
+            int((time.monotonic() - started) * 1000), bool(result.get("text")),
+        )
+        return result
     except ApiError as exc:
+        logger.warning(
+            "transcription_error provider=%s model=%s format=%s status=%s elapsed_ms=%d error=%s",
+            target.provider, target.model, response_format, exc.status,
+            int((time.monotonic() - started) * 1000), str(exc),
+        )
         raise explain(exc, target.service) from None
 
 

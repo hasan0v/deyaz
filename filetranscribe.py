@@ -8,18 +8,23 @@ their timestamps shifted into place.
 import contextlib
 import array
 import math
+import logging
 import os
 import re
 import shutil
 import subprocess
 import tempfile
 import threading
+import time
+from pathlib import Path
 import wave
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
 import api
 from i18n import t
+
+logger = logging.getLogger("deyaz.filetranscribe")
 
 CHUNK_SECONDS = 600          # 10 min ≈ 19 MB at 16 kHz mono s16
 CLEANUP_CHUNK_CHARS = 12000  # keep each cleanup call comfortably small
@@ -88,7 +93,7 @@ def extract_waveform_peaks(path, count=72):
 
 class FileTranscriber(QObject):
     progress = pyqtSignal(str)
-    finished = pyqtSignal(str, list)   # text, [(start, end, text)] when timestamped
+    finished = pyqtSignal(str, list, str)  # text, timed segments, warning
     failed = pyqtSignal(str)
 
     def __init__(self, conf, parent=None):
@@ -96,6 +101,7 @@ class FileTranscriber(QObject):
         self.conf = conf
         self._thread = None
         self._stop = threading.Event()
+        self._job_id = ""
 
     @property
     def busy(self):
@@ -107,6 +113,7 @@ class FileTranscriber(QObject):
         if self.busy:
             return
         self._stop.clear()
+        self._job_id = f"{int(time.time() * 1000):x}"[-10:]
         self._thread = threading.Thread(
             target=self._work,
             args=(path, timestamps, do_cleanup, language, result_type,
@@ -133,13 +140,23 @@ class FileTranscriber(QObject):
         for attempt in range(len(CHUNK_RETRY_DELAYS) + 1):
             self._check()
             try:
-                return operation(
+                result = operation(
                     target,
                     chunk_path,
                     language=language,
                     prompt=self.conf["transcribe_prompt"],
                 )
+                logger.info(
+                    "job=%s chunk=%d/%d attempt=%d status=complete items=%d",
+                    self._job_id, index, count, attempt + 1,
+                    len(result) if isinstance(result, list) else int(bool(result)),
+                )
+                return result
             except api.EmptyTranscriptError:
+                logger.warning(
+                    "job=%s chunk=%d/%d attempt=%d status=empty",
+                    self._job_id, index, count, attempt + 1,
+                )
                 # A chunk can legitimately contain only silence (especially the
                 # short tail of a long recording). Retry transient empty provider
                 # responses, then skip only this chunk instead of discarding the
@@ -164,6 +181,11 @@ class FileTranscriber(QObject):
                 if self._stop.wait(delay):
                     raise Cancelled
             except api.ApiError as exc:
+                logger.warning(
+                    "job=%s chunk=%d/%d attempt=%d status=error http=%s error=%s",
+                    self._job_id, index, count, attempt + 1,
+                    exc.status, str(exc),
+                )
                 if attempt >= len(CHUNK_RETRY_DELAYS) or not retryable_chunk_error(exc):
                     raise
                 delay = CHUNK_RETRY_DELAYS[attempt]
@@ -189,6 +211,12 @@ class FileTranscriber(QObject):
                 raise api.ApiError(t("ffmpeg not found. Install it to transcribe files."))
 
             workdir = tempfile.mkdtemp(prefix="deyaz-file-")
+            logger.info(
+                "job=%s start source_ext=%s source_bytes=%s timestamps=%s cleanup=%s result_type=%s output_language=%s",
+                self._job_id, Path(path).suffix.lower(),
+                os.path.getsize(path) if os.path.exists(path) else -1,
+                timestamps, do_cleanup, result_type, output_language,
+            )
             self.progress.emit(t("Converting audio…"))
             wav_path = _to_wav(path, workdir)
             self._check()
@@ -198,6 +226,10 @@ class FileTranscriber(QObject):
                 self.progress.emit(t("Splitting into {count} chunks…", count=len(chunks)))
 
             target = conf.file_transcribe_target()
+            logger.info(
+                "job=%s transcription_target provider=%s model=%s chunks=%d",
+                self._job_id, target.provider, target.model, len(chunks),
+            )
             pieces = []
             segments = []
             for index, (chunk_path, offset) in enumerate(chunks, start=1):
@@ -228,34 +260,92 @@ class FileTranscriber(QObject):
             if not text.strip():
                 raise api.EmptyTranscriptError(t("Transcript came back empty."))
 
-            if do_cleanup and text:
-                self._check()
-                self.progress.emit(t("Cleaning up…"))
-                text = self._cleanup(text, timestamps)
+            recovery_path = save_recovery_transcript(text, self._job_id)
+            logger.info(
+                "job=%s raw_checkpoint path=%s chars=%d",
+                self._job_id, recovery_path, len(text),
+            )
 
-            if text and (result_type != "transcript" or
-                         output_language != "original" or
-                         summary_focus.strip()):
-                self._check()
-                self.progress.emit("Nəticə seçilmiş formata uyğun hazırlanır…")
-                text = self._transform(
-                    text, timestamps, result_type, output_language,
-                    summary_focus,
+            raw_text = text
+            warning = ""
+            try:
+                if do_cleanup and text:
+                    self._check()
+                    self.progress.emit(t("Cleaning up…"))
+                    text = self._cleanup(text, timestamps)
+
+                if text and (result_type != "transcript" or
+                             output_language != "original" or
+                             summary_focus.strip()):
+                    self._check()
+                    self.progress.emit("Nəticə seçilmiş formata uyğun hazırlanır…")
+                    text = self._transform(
+                        text, timestamps, result_type, output_language,
+                        summary_focus,
+                    )
+            except api.ApiError as exc:
+                warning = t(
+                    "Son emal alınmadı; xam transkript qorundu: {error}",
+                    error=str(exc),
                 )
+                logger.exception(
+                    "job=%s postprocess_failed raw_checkpoint=%s",
+                    self._job_id, recovery_path,
+                )
+                text = raw_text
 
-            self.finished.emit(text, segments)
+            logger.info(
+                "job=%s finished chars=%d segments=%d warning=%s",
+                self._job_id, len(text), len(segments), bool(warning),
+            )
+            self.finished.emit(text, segments, warning)
 
         except Cancelled:
             self.progress.emit(t("Stopped."))
         except (api.ApiError, OSError, subprocess.SubprocessError, wave.Error) as exc:
+            logger.exception("job=%s failed error=%s", self._job_id, str(exc))
             self.failed.emit(str(exc))
         finally:
             if workdir:
                 shutil.rmtree(workdir, ignore_errors=True)
 
+
+def _recovery_root():
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local"
+        return Path(base) / "DeYaz" / "recovery"
+    base = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share"
+    return Path(base) / "deyaz" / "recovery"
+
+
+def save_recovery_transcript(text, job_id):
+    """Atomically retain raw text before optional cleanup/summary can fail."""
+    root = _recovery_root()
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    destination = root / f"transcript-{stamp}-{job_id}.txt"
+    temp = destination.with_suffix(".tmp")
+    temp.write_text(text, encoding="utf-8")
+    temp.replace(destination)
+    latest = root / "latest-transcript.txt"
+    latest_temp = root / "latest-transcript.tmp"
+    latest_temp.write_text(text, encoding="utf-8")
+    latest_temp.replace(latest)
+    snapshots = sorted(
+        root.glob("transcript-*.txt"), key=lambda item: item.stat().st_mtime
+    )
+    for stale in snapshots[:-10]:
+        stale.unlink(missing_ok=True)
+    return str(destination)
+
     def _cleanup(self, text, timestamps):
         conf = self.conf
         target = conf.cleanup_target()
+        logger.info(
+            "job=%s cleanup_target provider=%s model=%s blocks=%d",
+            self._job_id, target.provider, target.model,
+            len(split_text(text, timestamps)),
+        )
         prompt = conf.cleanup_prompt(with_timestamps=timestamps, subtitles=True)
         out = []
         for block in split_text(text, timestamps):
@@ -276,6 +366,11 @@ class FileTranscriber(QObject):
                    summary_focus):
         """Translate or reshape a transcript without treating it as instructions."""
         target = self.conf.cleanup_target()
+        logger.info(
+            "job=%s transform_target provider=%s model=%s result_type=%s output_language=%s",
+            self._job_id, target.provider, target.model, result_type,
+            output_language,
+        )
         language_rule = (
             "Write only in natural Azerbaijani. Translate faithfully where needed."
             if output_language == "az"
