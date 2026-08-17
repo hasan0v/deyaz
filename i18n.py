@@ -601,6 +601,7 @@ UI = {
     "OpenRouter istifadəyə hazırdır": ("OpenRouter is ready", "OpenRouter kullanıma hazır", "OpenRouter готов к работе"),
     "OpenRouter krediti yoxdur": ("No OpenRouter credit", "OpenRouter kredisi yok", "Нет средств OpenRouter"),
     "Sorğu HTTP 402 ilə dayandırıldı. Kredit əlavə etdikdən sonra yenidən yoxlayın.": ("The request stopped with HTTP 402. Add credit and try again.", "İstek HTTP 402 ile durdu. Kredi ekleyip yeniden deneyin.", "Запрос остановлен с HTTP 402. Пополните счёт и повторите попытку."),
+    "Chunk {index}/{count}: müvəqqəti API xətası. {seconds} saniyədən sonra yenidən yoxlanılır ({attempt}/{maximum})…": ("Chunk {index}/{count}: temporary API error. Retrying in {seconds} seconds ({attempt}/{maximum})…", "Parça {index}/{count}: geçici API hatası. {seconds} saniye sonra yeniden deneniyor ({attempt}/{maximum})…", "Фрагмент {index}/{count}: временная ошибка API. Повтор через {seconds} сек. ({attempt}/{maximum})…"),
     "Görüş qeydi tamamlanır; hazır olanda tətbiqi bağlaya bilərsən.": ("The meeting recording is finishing; you can close the app when it is ready.", "Toplantı kaydı tamamlanıyor; hazır olunca uygulamayı kapatabilirsin.", "Запись встречи завершается; приложение можно закрыть после готовности."),
     "${amount} hesab balansı": ("${amount} account balance", "${amount} hesap bakiyesi", "Баланс счёта: ${amount}"),
     "${amount} açar limiti qalıb": ("${amount} key limit remaining", "${amount} anahtar limiti kaldı", "Остаток лимита ключа: ${amount}"),

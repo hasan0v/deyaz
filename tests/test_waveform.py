@@ -18,16 +18,39 @@ class WaveformTests(unittest.TestCase):
         else:
             self.assertEqual(kwargs, {})
 
-    def test_gpt_transcribe_has_music_vocal_fallback(self):
+    def test_only_transient_provider_failures_are_retried(self):
+        self.assertTrue(filetranscribe.retryable_chunk_error(
+            api.ApiError("invalid model ID", 400)
+        ))
+        self.assertTrue(filetranscribe.retryable_chunk_error(
+            api.ApiError("rate limited", 429)
+        ))
+        self.assertTrue(filetranscribe.retryable_chunk_error(
+            api.ApiError("gateway", 503)
+        ))
+        self.assertFalse(filetranscribe.retryable_chunk_error(
+            api.ApiError("bad API key", 401)
+        ))
+
+    @patch("filetranscribe.CHUNK_RETRY_DELAYS", (0, 0))
+    @patch("filetranscribe.api.transcribe")
+    def test_chunk_retry_keeps_exact_selected_model(self, transcribe):
+        transcribe.side_effect = [
+            api.ApiError("HTTP 400: invalid model ID", 400),
+            "Salam",
+        ]
         target = api.Target(
             "openai", "OpenAI", "key", "https://api.openai.com/v1",
             "gpt-transcribe",
         )
-        fallback = filetranscribe.empty_transcript_fallback(target)
-        self.assertEqual(fallback.model, "gpt-4o-transcribe")
-        self.assertIsNone(filetranscribe.empty_transcript_fallback(
-            target._replace(model="gpt-4o-transcribe")
-        ))
+        worker = filetranscribe.FileTranscriber({"transcribe_prompt": ""})
+        result = worker._transcribe_chunk(
+            target, "chunk.wav", "az", False, 5, 9
+        )
+        self.assertEqual(result, "Salam")
+        self.assertEqual([call.args[0].model for call in transcribe.call_args_list], [
+            "gpt-transcribe", "gpt-transcribe",
+        ])
 
     @patch("filetranscribe.subprocess.run")
     def test_extracts_normalized_real_audio_peaks(self, run):

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.10 — Resilient long-file transcription
+
+- Retries transient per-chunk OpenAI routing, rate-limit and server errors.
+- Keeps completed chunks in memory and retries only the failed chunk.
+- Never substitutes `gpt-transcribe` with another transcription model.
+- Shows localized retry progress and remains cancellable during backoff.
+
 ## 1.0.9 — GPT Transcribe compatibility
 
 - Keeps `gpt-transcribe` as the highest-quality OpenAI transcription model.

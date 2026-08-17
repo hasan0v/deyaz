@@ -25,6 +25,7 @@ CHUNK_SECONDS = 600          # 10 min ≈ 19 MB at 16 kHz mono s16
 CLEANUP_CHUNK_CHARS = 12000  # keep each cleanup call comfortably small
 RATE = 16000
 MIN_SUBTITLE_SECONDS = 1.5   # how long a cue with no end time of its own stays up
+CHUNK_RETRY_DELAYS = (2, 5, 10, 20)
 
 # The [mm:ss] or [h:mm:ss] prefix a timestamped line starts with.
 STAMP_RE = re.compile(r"^\[(?:(\d+):)?(\d{1,2}):(\d{2})\]\s*")
@@ -47,12 +48,12 @@ class Cancelled(Exception):
     pass
 
 
-def empty_transcript_fallback(target):
-    """Use the proven singing-vocal model only when GPT Transcribe hears nothing."""
-    model = (target.model or "").split("/")[-1]
-    if target.provider == "openai" and model == "gpt-transcribe":
-        return target._replace(model="gpt-4o-transcribe")
-    return None
+def retryable_chunk_error(exc):
+    """Return True for provider failures that can succeed on the same model."""
+    status = getattr(exc, "status", None)
+    if status in (408, 409, 429) or (status is not None and 500 <= status <= 599):
+        return True
+    return status == 400 and "invalid model id" in str(exc).lower()
 
 
 def extract_waveform_peaks(path, count=72):
@@ -121,6 +122,41 @@ class FileTranscriber(QObject):
         if self._stop.is_set():
             raise Cancelled
 
+    def _transcribe_chunk(self, target, chunk_path, language, timestamps,
+                          index, count):
+        """Transcribe one chunk, retrying transient routing errors in place.
+
+        A completed chunk stays in the caller's accumulated result while only
+        the failed chunk is retried. The selected model is never substituted.
+        """
+        operation = api.transcribe_segments if timestamps else api.transcribe
+        for attempt in range(len(CHUNK_RETRY_DELAYS) + 1):
+            self._check()
+            try:
+                return operation(
+                    target,
+                    chunk_path,
+                    language=language,
+                    prompt=self.conf["transcribe_prompt"],
+                )
+            except api.EmptyTranscriptError:
+                raise
+            except api.ApiError as exc:
+                if attempt >= len(CHUNK_RETRY_DELAYS) or not retryable_chunk_error(exc):
+                    raise
+                delay = CHUNK_RETRY_DELAYS[attempt]
+                self.progress.emit(t(
+                    "Chunk {index}/{count}: müvəqqəti API xətası. {seconds} "
+                    "saniyədən sonra yenidən yoxlanılır ({attempt}/{maximum})…",
+                    index=index,
+                    count=count,
+                    seconds=delay,
+                    attempt=attempt + 1,
+                    maximum=len(CHUNK_RETRY_DELAYS),
+                ))
+                if self._stop.wait(delay):
+                    raise Cancelled
+
     def _work(self, path, timestamps, do_cleanup, language=None,
               result_type="transcript", output_language="original",
               summary_focus=""):
@@ -140,7 +176,6 @@ class FileTranscriber(QObject):
                 self.progress.emit(t("Splitting into {count} chunks…", count=len(chunks)))
 
             target = conf.file_transcribe_target()
-            active_target = target
             pieces = []
             segments = []
             for index, (chunk_path, offset) in enumerate(chunks, start=1):
@@ -148,55 +183,23 @@ class FileTranscriber(QObject):
                 self.progress.emit(
                     t("Transcribing chunk {index}/{count}…", index=index, count=len(chunks))
                 )
+                chunk_result = self._transcribe_chunk(
+                    target,
+                    chunk_path,
+                    (language or conf["language"]).replace("auto", ""),
+                    timestamps,
+                    index,
+                    len(chunks),
+                )
                 if timestamps:
-                    try:
-                        chunk_segments = api.transcribe_segments(
-                            active_target, chunk_path,
-                            language=(language or conf["language"]).replace("auto", ""),
-                            prompt=conf["transcribe_prompt"],
-                        )
-                    except api.EmptyTranscriptError:
-                        fallback = empty_transcript_fallback(active_target)
-                        if fallback is None:
-                            raise
-                        self.progress.emit(
-                            "GPT Transcribe vokal aşkarlamadı — "
-                            "GPT-4o Transcribe ilə yenidən yoxlanılır…"
-                        )
-                        active_target = fallback
-                        chunk_segments = api.transcribe_segments(
-                            active_target, chunk_path,
-                            language=(language or conf["language"]).replace("auto", ""),
-                            prompt=conf["transcribe_prompt"],
-                        )
                     segments.extend(
                         (start + offset, end + offset, line)
-                        for start, end, line in chunk_segments
+                        for start, end, line in chunk_result
                     )
                     pieces = [f"[{format_timestamp(start)}] {line}"
                               for start, _, line in segments]
                 else:
-                    try:
-                        chunk_text = api.transcribe(
-                            active_target, chunk_path,
-                            language=(language or conf["language"]).replace("auto", ""),
-                            prompt=conf["transcribe_prompt"],
-                        )
-                    except api.EmptyTranscriptError:
-                        fallback = empty_transcript_fallback(active_target)
-                        if fallback is None:
-                            raise
-                        self.progress.emit(
-                            "GPT Transcribe vokal aşkarlamadı — "
-                            "GPT-4o Transcribe ilə yenidən yoxlanılır…"
-                        )
-                        active_target = fallback
-                        chunk_text = api.transcribe(
-                            active_target, chunk_path,
-                            language=(language or conf["language"]).replace("auto", ""),
-                            prompt=conf["transcribe_prompt"],
-                        )
-                    pieces.append(chunk_text)
+                    pieces.append(chunk_result)
 
             text = "\n".join(pieces) if timestamps else " ".join(pieces)
 
