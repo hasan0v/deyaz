@@ -28,6 +28,7 @@ logger = logging.getLogger("deyaz.filetranscribe")
 
 CHUNK_SECONDS = 600          # 10 min ≈ 19 MB at 16 kHz mono s16
 CLEANUP_CHUNK_CHARS = 12000  # keep each cleanup call comfortably small
+TRANSFORM_CHUNK_CHARS = 48000  # modern text models safely handle one long transcript
 RATE = 16000
 MIN_SUBTITLE_SECONDS = 1.5   # how long a cue with no end time of its own stays up
 CHUNK_RETRY_DELAYS = (2, 5, 10, 20)
@@ -269,14 +270,17 @@ class FileTranscriber(QObject):
             raw_text = text
             warning = ""
             try:
-                if do_cleanup and text:
+                requires_transform = (
+                    result_type != "transcript"
+                    or output_language != "original"
+                    or bool(summary_focus.strip())
+                )
+                if do_cleanup and text and not requires_transform:
                     self._check()
                     self.progress.emit(t("Cleaning up…"))
                     text = self._cleanup(text, timestamps)
 
-                if text and (result_type != "transcript" or
-                             output_language != "original" or
-                             summary_focus.strip()):
+                if text and requires_transform:
                     self._check()
                     self.progress.emit("Nəticə seçilmiş formata uyğun hazırlanır…")
                     text = self._transform(
@@ -308,35 +312,6 @@ class FileTranscriber(QObject):
         finally:
             if workdir:
                 shutil.rmtree(workdir, ignore_errors=True)
-
-
-def _recovery_root():
-    if os.name == "nt":
-        base = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local"
-        return Path(base) / "DeYaz" / "recovery"
-    base = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share"
-    return Path(base) / "deyaz" / "recovery"
-
-
-def save_recovery_transcript(text, job_id):
-    """Atomically retain raw text before optional cleanup/summary can fail."""
-    root = _recovery_root()
-    root.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    destination = root / f"transcript-{stamp}-{job_id}.txt"
-    temp = destination.with_suffix(".tmp")
-    temp.write_text(text, encoding="utf-8")
-    temp.replace(destination)
-    latest = root / "latest-transcript.txt"
-    latest_temp = root / "latest-transcript.tmp"
-    latest_temp.write_text(text, encoding="utf-8")
-    latest_temp.replace(latest)
-    snapshots = sorted(
-        root.glob("transcript-*.txt"), key=lambda item: item.stat().st_mtime
-    )
-    for stale in snapshots[:-10]:
-        stale.unlink(missing_ok=True)
-    return str(destination)
 
     def _cleanup(self, text, timestamps):
         conf = self.conf
@@ -414,7 +389,7 @@ Use only information actually present in it and never invent details.
 {tasks.get(result_type, tasks['transcript'])}{focus_rule}
 Return only the requested result, without a preamble or closing note."""
 
-        blocks = split_text(text, timestamps)
+        blocks = split_text(text, timestamps, TRANSFORM_CHUNK_CHARS)
         results = []
         for index, block in enumerate(blocks, start=1):
             self._check()
@@ -463,6 +438,35 @@ Return only the requested result, without a preamble or closing note."""
             service=target.service,
             timeout=300,
         )
+
+
+def _recovery_root():
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local"
+        return Path(base) / "DeYaz" / "recovery"
+    base = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share"
+    return Path(base) / "deyaz" / "recovery"
+
+
+def save_recovery_transcript(text, job_id):
+    """Atomically retain raw text before optional cleanup/summary can fail."""
+    root = _recovery_root()
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    destination = root / f"transcript-{stamp}-{job_id}.txt"
+    temp = destination.with_suffix(".tmp")
+    temp.write_text(text, encoding="utf-8")
+    temp.replace(destination)
+    latest = root / "latest-transcript.txt"
+    latest_temp = root / "latest-transcript.tmp"
+    latest_temp.write_text(text, encoding="utf-8")
+    latest_temp.replace(latest)
+    snapshots = sorted(
+        root.glob("transcript-*.txt"), key=lambda item: item.stat().st_mtime
+    )
+    for stale in snapshots[:-10]:
+        stale.unlink(missing_ok=True)
+    return str(destination)
 
 
 def format_timestamp(seconds):
@@ -564,15 +568,15 @@ def split_wav(wav_path, workdir):
         return chunks
 
 
-def split_text(text, timestamps):
+def split_text(text, timestamps, max_chars=CLEANUP_CHUNK_CHARS):
     """Break long text into cleanup-sized blocks, never mid-line."""
-    if len(text) <= CLEANUP_CHUNK_CHARS:
+    if len(text) <= max_chars:
         return [text]
     separator = "\n" if timestamps else " "
     blocks, current = [], ""
     for part in text.split(separator):
         candidate = f"{current}{separator}{part}" if current else part
-        if len(candidate) > CLEANUP_CHUNK_CHARS and current:
+        if len(candidate) > max_chars and current:
             blocks.append(current)
             current = part
         else:

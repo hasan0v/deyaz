@@ -1,5 +1,5 @@
 #define MyAppName "DeYaz"
-#define MyAppVersion "1.0.12"
+#define MyAppVersion "1.0.13"
 #define MyAppPublisher "Ali Hasanov"
 #define MyAppURL "https://github.com/hasan0v/deyaz"
 #define MyAppSupportURL "https://github.com/hasan0v/deyaz/issues"

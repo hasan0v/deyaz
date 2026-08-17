@@ -10,6 +10,20 @@ import api
 
 
 class WaveformTests(unittest.TestCase):
+    def test_file_transcriber_exposes_postprocessing_methods(self):
+        self.assertTrue(callable(getattr(filetranscribe.FileTranscriber, "_cleanup", None)))
+        self.assertTrue(callable(getattr(filetranscribe.FileTranscriber, "_transform", None)))
+
+    def test_transform_uses_a_larger_single_request_for_long_transcripts(self):
+        text = "word " * 6500
+        self.assertGreater(len(text), filetranscribe.CLEANUP_CHUNK_CHARS)
+        self.assertEqual(
+            len(filetranscribe.split_text(
+                text, False, filetranscribe.TRANSFORM_CHUNK_CHARS
+            )),
+            1,
+        )
+
     def test_ffmpeg_helpers_are_hidden_on_windows(self):
         kwargs = filetranscribe.hidden_subprocess_kwargs()
         if os.name == "nt":

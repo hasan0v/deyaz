@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.13 — Reliable and faster post-processing
+
+- Restores the cleanup and transform methods to the file transcription worker.
+- Logs uncaught background-thread exceptions instead of leaving the UI busy forever.
+- Avoids redundant cleanup before summaries, translations and meeting notes.
+- Uses a larger safe text window so an 80-minute transcript normally needs one transform request.
+
 ## 1.0.12 — Diagnostics and transcript recovery
 
 - Stores bounded technical logs under the DeYaz local data folder without keys or transcript text.

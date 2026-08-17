@@ -40,6 +40,7 @@ def setup_logging():
 
 def install_exception_hook():
     previous = sys.excepthook
+    previous_thread = getattr(__import__("threading"), "excepthook", None)
 
     def report(exc_type, exc, traceback):
         logging.getLogger("deyaz.crash").critical(
@@ -48,3 +49,16 @@ def install_exception_hook():
         previous(exc_type, exc, traceback)
 
     sys.excepthook = report
+
+    if previous_thread is not None:
+        import threading
+
+        def report_thread(args):
+            logging.getLogger("deyaz.crash").critical(
+                "Unhandled thread exception thread=%s",
+                getattr(args.thread, "name", "unknown"),
+                exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+            )
+            previous_thread(args)
+
+        threading.excepthook = report_thread

@@ -7847,7 +7847,7 @@ def main():
     diagnostics.install_exception_hook()
     import logging
     logging.getLogger("deyaz.app").info(
-        "application_start version=1.0.12 platform=%s log=%s",
+        "application_start version=1.0.13 platform=%s log=%s",
         sys.platform, log_path,
     )
     # Set this before QApplication so Windows groups the process under DeYaz and
