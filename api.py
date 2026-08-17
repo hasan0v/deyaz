@@ -19,7 +19,7 @@ import wave
 from i18n import t
 
 APP_URL = "https://github.com/hasan0v/deyaz"
-USER_AGENT = f"deyaz/3.0 (+{APP_URL})"
+USER_AGENT = f"deyaz/1.0.9 (+{APP_URL})"
 OPENAI_URL = "https://api.openai.com/v1"
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 

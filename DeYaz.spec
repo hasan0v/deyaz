@@ -3,7 +3,7 @@
 import sys
 
 
-version = "1.0.8"
+version = "1.0.9"
 is_windows = sys.platform == "win32"
 is_macos = sys.platform == "darwin"
 icon = (

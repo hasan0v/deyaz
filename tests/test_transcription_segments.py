@@ -66,6 +66,13 @@ class TranscriptionSegmentTests(unittest.TestCase):
         self.assertEqual(len(request.call_args_list), 1)
         self.assertEqual(request.call_args.args[4], "json")
 
+    @patch("api._request")
+    def test_gpt_transcribe_id_reaches_http_unchanged(self, request):
+        request.return_value = {"text": "Salam"}
+        api._transcribe_request(TARGET, self.make_wav(1), "az", "", "json")
+        body = request.call_args.args[1]
+        self.assertIn(b'\r\n\r\ngpt-transcribe\r\n', body)
+
     @patch("api._transcribe_request")
     def test_verbose_rejection_retries_same_model_as_json(self, request):
         target = TARGET._replace(model="native-segment-stt")

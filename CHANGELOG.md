@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.9 — GPT Transcribe compatibility
+
+- Keeps `gpt-transcribe` as the highest-quality OpenAI transcription model.
+- Sends the new model only in its supported JSON transcription mode.
+- Builds timestamps locally without changing the selected model.
+- Adds an API-boundary regression test that prevents accidental model substitution.
+
 ## 1.0.8 — Dark media controls and CRT playback
 
 - Made the GitHub and LinkedIn header icons follow the active light or dark theme.
