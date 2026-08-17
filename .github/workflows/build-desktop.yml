@@ -78,12 +78,12 @@ jobs:
         shell: pwsh
         run: |
           $certPath = Join-Path $env:RUNNER_TEMP 'deyaz-signing.pfx'
-          & signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certPath /p $env:WINDOWS_CERTIFICATE_PASSWORD dist-installer/DeYaz-Setup-1.0.10-x64.exe
+          & signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certPath /p $env:WINDOWS_CERTIFICATE_PASSWORD dist-installer/DeYaz-Setup-1.0.11-x64.exe
 
       - name: Package Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Copy-Item dist-installer/DeYaz-Setup-1.0.10-x64.exe DeYaz-Windows-x64.exe
+        run: Copy-Item dist-installer/DeYaz-Setup-1.0.11-x64.exe DeYaz-Windows-x64.exe
 
       - name: Package macOS
         if: runner.os == 'macOS'

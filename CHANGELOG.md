@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.11 — Silent-tail recovery
+
+- Retries an empty transcription response per chunk without changing the selected model.
+- Treats a persistently empty chunk as silence while preserving every completed chunk.
+- Reports an empty-transcript error only when the entire recording contains no transcribable speech.
+
 ## 1.0.10 — Resilient long-file transcription
 
 - Retries transient per-chunk OpenAI routing, rate-limit and server errors.

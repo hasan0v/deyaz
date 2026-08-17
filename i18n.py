@@ -19,6 +19,8 @@ AZ = {
     "{service} API key is empty. Add it in Settings.":
         "{service} API açarı boşdur. Ayarlarda əlavə et.",
     "Transcript came back empty.": "Transkript boş qayıtdı.",
+    "Chunk {index}/{count}: danışıq tapılmadı, hissə ötürülür…": "Chunk {index}/{count}: danışıq tapılmadı, hissə ötürülür…",
+    "Chunk {index}/{count}: boş cavab alındı. {seconds} saniyədən sonra yenidən yoxlanılır ({attempt}/{maximum})…": "Chunk {index}/{count}: boş cavab alındı. {seconds} saniyədən sonra yenidən yoxlanılır ({attempt}/{maximum})…",
     "The cleanup model returned an empty reply.":
         "Təmizləmə modeli boş cavab qaytardı.",
     "The model returned an empty reply.": "Model boş cavab qaytardı.",
@@ -602,6 +604,8 @@ UI = {
     "OpenRouter krediti yoxdur": ("No OpenRouter credit", "OpenRouter kredisi yok", "Нет средств OpenRouter"),
     "Sorğu HTTP 402 ilə dayandırıldı. Kredit əlavə etdikdən sonra yenidən yoxlayın.": ("The request stopped with HTTP 402. Add credit and try again.", "İstek HTTP 402 ile durdu. Kredi ekleyip yeniden deneyin.", "Запрос остановлен с HTTP 402. Пополните счёт и повторите попытку."),
     "Chunk {index}/{count}: müvəqqəti API xətası. {seconds} saniyədən sonra yenidən yoxlanılır ({attempt}/{maximum})…": ("Chunk {index}/{count}: temporary API error. Retrying in {seconds} seconds ({attempt}/{maximum})…", "Parça {index}/{count}: geçici API hatası. {seconds} saniye sonra yeniden deneniyor ({attempt}/{maximum})…", "Фрагмент {index}/{count}: временная ошибка API. Повтор через {seconds} сек. ({attempt}/{maximum})…"),
+    "Chunk {index}/{count}: boş cavab alındı. {seconds} saniyədən sonra yenidən yoxlanılır ({attempt}/{maximum})…": ("Chunk {index}/{count}: empty response. Retrying in {seconds} seconds ({attempt}/{maximum})…", "Parça {index}/{count}: boş yanıt alındı. {seconds} saniye sonra yeniden deneniyor ({attempt}/{maximum})…", "Фрагмент {index}/{count}: получен пустой ответ. Повтор через {seconds} сек. ({attempt}/{maximum})…"),
+    "Chunk {index}/{count}: danışıq tapılmadı, hissə ötürülür…": ("Chunk {index}/{count}: no speech detected; skipping this chunk…", "Parça {index}/{count}: konuşma algılanmadı; bu parça atlanıyor…", "Фрагмент {index}/{count}: речь не обнаружена; фрагмент пропущен…"),
     "Görüş qeydi tamamlanır; hazır olanda tətbiqi bağlaya bilərsən.": ("The meeting recording is finishing; you can close the app when it is ready.", "Toplantı kaydı tamamlanıyor; hazır olunca uygulamayı kapatabilirsin.", "Запись встречи завершается; приложение можно закрыть после готовности."),
     "${amount} hesab balansı": ("${amount} account balance", "${amount} hesap bakiyesi", "Баланс счёта: ${amount}"),
     "${amount} açar limiti qalıb": ("${amount} key limit remaining", "${amount} anahtar limiti kaldı", "Остаток лимита ключа: ${amount}"),

@@ -52,6 +52,36 @@ class WaveformTests(unittest.TestCase):
             "gpt-transcribe", "gpt-transcribe",
         ])
 
+    @patch("filetranscribe.CHUNK_RETRY_DELAYS", (0, 0))
+    @patch("filetranscribe.api.transcribe")
+    def test_silent_chunk_is_skipped_after_retries(self, transcribe):
+        transcribe.side_effect = api.EmptyTranscriptError("empty")
+        target = api.Target(
+            "openai", "OpenAI", "key", "https://api.openai.com/v1",
+            "gpt-transcribe",
+        )
+        worker = filetranscribe.FileTranscriber({"transcribe_prompt": ""})
+        result = worker._transcribe_chunk(
+            target, "silent-tail.wav", "az", False, 9, 9
+        )
+        self.assertEqual(result, "")
+        self.assertEqual(transcribe.call_count, 3)
+
+    @patch("filetranscribe.CHUNK_RETRY_DELAYS", (0, 0))
+    @patch("filetranscribe.api.transcribe_segments")
+    def test_silent_timestamped_chunk_returns_empty_segment_list(self, transcribe):
+        transcribe.side_effect = api.EmptyTranscriptError("empty")
+        target = api.Target(
+            "openai", "OpenAI", "key", "https://api.openai.com/v1",
+            "gpt-transcribe",
+        )
+        worker = filetranscribe.FileTranscriber({"transcribe_prompt": ""})
+        result = worker._transcribe_chunk(
+            target, "silent-tail.wav", "az", True, 9, 9
+        )
+        self.assertEqual(result, [])
+        self.assertEqual(transcribe.call_count, 3)
+
     @patch("filetranscribe.subprocess.run")
     def test_extracts_normalized_real_audio_peaks(self, run):
         samples = [0, 1000, -2000, 4000] * 24

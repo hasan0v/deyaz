@@ -140,7 +140,29 @@ class FileTranscriber(QObject):
                     prompt=self.conf["transcribe_prompt"],
                 )
             except api.EmptyTranscriptError:
-                raise
+                # A chunk can legitimately contain only silence (especially the
+                # short tail of a long recording). Retry transient empty provider
+                # responses, then skip only this chunk instead of discarding the
+                # transcript accumulated from every completed chunk.
+                if attempt >= len(CHUNK_RETRY_DELAYS):
+                    self.progress.emit(t(
+                        "Chunk {index}/{count}: danışıq tapılmadı, hissə ötürülür…",
+                        index=index,
+                        count=count,
+                    ))
+                    return [] if timestamps else ""
+                delay = CHUNK_RETRY_DELAYS[attempt]
+                self.progress.emit(t(
+                    "Chunk {index}/{count}: boş cavab alındı. {seconds} "
+                    "saniyədən sonra yenidən yoxlanılır ({attempt}/{maximum})…",
+                    index=index,
+                    count=count,
+                    seconds=delay,
+                    attempt=attempt + 1,
+                    maximum=len(CHUNK_RETRY_DELAYS),
+                ))
+                if self._stop.wait(delay):
+                    raise Cancelled
             except api.ApiError as exc:
                 if attempt >= len(CHUNK_RETRY_DELAYS) or not retryable_chunk_error(exc):
                     raise
@@ -199,9 +221,12 @@ class FileTranscriber(QObject):
                     pieces = [f"[{format_timestamp(start)}] {line}"
                               for start, _, line in segments]
                 else:
-                    pieces.append(chunk_result)
+                    if chunk_result:
+                        pieces.append(chunk_result)
 
             text = "\n".join(pieces) if timestamps else " ".join(pieces)
+            if not text.strip():
+                raise api.EmptyTranscriptError(t("Transcript came back empty."))
 
             if do_cleanup and text:
                 self._check()
